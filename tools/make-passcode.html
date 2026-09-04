@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Make a passcode for the Sea Wolf simulation</title>
+
+<!--
+  make-passcode.html — turns a password you choose into the scrambled value
+  that goes in config.js.
+
+  WHY THE SCRAMBLE
+  ----------------
+  Everything in a GitHub Pages repository is readable by anybody who looks.
+  If the real password were written in config.js, it would be public. So
+  config.js holds a one-way scramble of it instead: the page can check a
+  typed password against the scramble, but nobody can work the password
+  back out from it.
+
+  Be honest with yourself about what this does and does not do. It stops the
+  password being casually readable. It does NOT stop a determined technical
+  person getting into the simulation, because the whole check runs inside
+  their own browser. The old simulation had the same limitation.
+
+  HOW TO USE IT
+  -------------
+  1. Open this page (double-clicking the file works; so does opening it from
+     the GitHub Pages address).
+  2. Type the password you want to use.
+  3. Press the button and copy the long line it prints.
+  4. Paste it into config.js as the value of passcodeHash.
+-->
+
+<style>
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f4f6fa; color: #1a2230;
+    margin: 0; padding: 34px 20px; line-height: 1.55;
+  }
+  .card {
+    max-width: 720px; margin: 0 auto; background: #fff;
+    border: 1px solid #d7dce5; border-radius: 14px; padding: 26px 28px;
+  }
+  h1 { font-size: 21px; margin: 0 0 6px; }
+  p.lede { color: #5b6677; margin: 0 0 22px; }
+  label { display: block; font-weight: 600; margin-bottom: 6px; }
+  input[type=text] {
+    width: 100%; padding: 11px 13px; font-size: 15px; font-family: inherit;
+    border: 1px solid #d7dce5; border-radius: 8px;
+  }
+  button {
+    margin-top: 14px; background: #3b82f6; color: #fff; border: none;
+    border-radius: 8px; padding: 11px 22px; font-size: 15px;
+    font-family: inherit; cursor: pointer;
+  }
+  button:hover { background: #2563eb; }
+  #out { margin-top: 24px; display: none; }
+  #hash {
+    background: #eef2f9; border: 1px solid #d7dce5; border-radius: 8px;
+    padding: 13px; font-family: ui-monospace, Consolas, monospace;
+    font-size: 14px; word-break: break-all; user-select: all;
+  }
+  .paste {
+    margin-top: 16px; background: #1f2733; color: #e6e9f0;
+    border-radius: 8px; padding: 13px 15px;
+    font-family: ui-monospace, Consolas, monospace; font-size: 13px;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .warn {
+    margin-top: 22px; background: #fef3c7; border: 1px solid #fde68a;
+    border-radius: 8px; padding: 13px 15px; font-size: 14px;
+  }
+  .err { color: #dc2626; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Make a passcode</h1>
+  <p class="lede">Type the password you want candidates to use, then paste the result into
+  <code>config.js</code>.</p>
+
+  <label for="pw">The password you want to use</label>
+  <input id="pw" type="text" autocomplete="off" spellcheck="false"
+         placeholder="for example: seawolf-2026-spring">
+  <button id="go">Scramble it</button>
+  <div class="err" id="err"></div>
+
+  <div id="out">
+    <p><strong>Copy this line:</strong></p>
+    <div id="hash"></div>
+    <p style="margin-top:18px"><strong>It goes into <code>config.js</code> like this:</strong></p>
+    <div class="paste" id="paste"></div>
+  </div>
+
+  <div class="warn">
+    <strong>Two things worth knowing.</strong><br>
+    Write the password itself down somewhere safe — this page cannot get it back
+    for you, which is the whole point of the scramble.<br><br>
+    This page needs a secure connection to do the scrambling. Opening it from
+    the GitHub Pages address always works. Double-clicking the file on your own
+    computer works in most browsers but not all; if you see an error below,
+    open it from the web address instead.
+  </div>
+</div>
+
+<script>
+document.getElementById("go").addEventListener("click", makeHash);
+document.getElementById("pw").addEventListener("keydown", function (e) {
+  if (e.key === "Enter") makeHash();
+});
+
+function makeHash() {
+  var password = document.getElementById("pw").value;
+  var err = document.getElementById("err");
+  err.textContent = "";
+  document.getElementById("out").style.display = "none";
+
+  if (!password) { err.textContent = "Type a password first."; return; }
+  if (!window.crypto || !window.crypto.subtle) {
+    err.textContent = "This browser will not scramble passwords on a page opened " +
+      "straight from your computer. Open this page from your GitHub Pages address instead.";
+    return;
+  }
+
+  var bytes = new TextEncoder().encode(password);
+  window.crypto.subtle.digest("SHA-256", bytes).then(function (buffer) {
+    var hex = Array.prototype.map.call(new Uint8Array(buffer), function (b) {
+      return ("0" + b.toString(16)).slice(-2);
+    }).join("");
+    document.getElementById("hash").textContent = hex;
+    document.getElementById("paste").textContent = '  passcodeHash: "' + hex + '",';
+    document.getElementById("out").style.display = "block";
+  }).catch(function () {
+    err.textContent = "The browser refused to scramble the password. Open this page " +
+      "from your GitHub Pages address instead of from your own computer.";
+  });
+}
+</script>
+</body>
+</html>

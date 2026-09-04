@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sea Wolf — engine self-tests</title>
+
+<!--
+  tests.html — the page WK opens to check that the marking engine is correct.
+
+  WHAT IT DOES
+  ------------
+  It loads the real data files and the real rules engine (js/marking.js) and
+  runs five groups of checks against them. Every check is a row in the table
+  below: green means it passed, red means it failed and shows what was
+  expected next to what actually happened.
+
+  HOW TO READ IT
+  --------------
+  Look at the big banner at the top. If it says ALL TEST GROUPS PASSED, the
+  engine is behaving. If it says FAILED, the name of the failing group is in
+  the banner and the red rows below say what went wrong.
+
+  HOW TO OPEN IT
+  --------------
+  It has to be served by a web address, not opened as a file from your
+  computer, because it loads the data files and browsers block that from a
+  plain file. Two ways:
+    * the simplest: put the folder on GitHub Pages and open
+      https://<user>.github.io/<repo>/tests.html
+    * on your own machine: open a terminal in this folder and run
+        python -m http.server 8000
+      then open http://localhost:8000/tests.html
+
+  It needs nothing installed: no npm, no libraries, no internet.
+-->
+
+<style>
+  :root {
+    --ink: #1a2230;
+    --muted: #5b6677;
+    --line: #d7dce5;
+    --pass: #16a34a;
+    --fail: #dc2626;
+    --pass-bg: #f0fdf4;
+    --fail-bg: #fef2f2;
+  }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background: #f6f7fa;
+    margin: 0;
+    padding: 24px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  #banner {
+    padding: 18px 22px;
+    border-radius: 12px;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    border: 1px solid transparent;
+  }
+  #banner.pass { background: var(--pass-bg); color: var(--pass); border-color: #bbf7d0; }
+  #banner.fail { background: var(--fail-bg); color: var(--fail); border-color: #fecaca; }
+  #banner.busy { background: #fff; color: var(--muted); border-color: var(--line); }
+  #tally { color: var(--muted); margin: 0 0 24px; }
+  h2 {
+    font-size: 16px;
+    margin: 28px 0 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  h2 .count { font-weight: 400; color: var(--muted); font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; background: #fff; }
+  td { border-bottom: 1px solid var(--line); padding: 7px 10px; vertical-align: top; font-size: 14px; }
+  tr.pass td.mark { color: var(--pass); font-weight: 700; width: 28px; }
+  tr.fail { background: var(--fail-bg); }
+  tr.fail td.mark { color: var(--fail); font-weight: 700; width: 28px; }
+  .detail { color: var(--muted); font-size: 13px; white-space: pre-wrap;
+            font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  .detail b { color: var(--ink); font-family: inherit; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Sea Wolf — engine self-tests</h1>
+  <p class="sub">Checks <code>js/marking.js</code> against the real data files in <code>data/</code>.</p>
+  <div id="banner" class="busy">Running…</div>
+  <p id="tally"></p>
+  <div id="results"></div>
+</div>
+
+<script src="js/marking.js"></script>
+<script>
+"use strict";
+
+/* ====================================================================
+   The answer key, transcribed by hand from "SW 1 - Answer Key.docx".
+
+   This is typed out rather than worked out, on purpose. The whole point
+   of test group 2 is to check the engine against the published key, so
+   the key must come from the document and not from the engine.
+   ==================================================================== */
+var m = function (n) { return "Microbe " + n; };
+
+var KEY = {
+  1: {
+    step1: { trait: "Pressure Resistant", attribute: "Rigidity", range: [8, 10] },
+    step2: { "Site 1": [7, 79, 11, 51, 98], "Site 2": [32, 13], "Return": [92, 41, 53] },
+    step3: [43, 75, 48, 19],
+    step4best: 80,
+    step4combos: [
+      [21,33,81],[21,33,43],[21,33,19],[21,88,43],[21,88,19],[21,43,75],[21,43,48],
+      [21,43,19],[21,48,19],[33,9,43],[33,81,19],[33,88,43],[33,88,75],[33,88,48],
+      [33,88,19],[33,43,75],[33,43,48],[33,43,19],[33,75,19],[9,43,75],[88,43,19],
+      [43,48,19]
+    ],
+    step5: { "Site 2": [32], "Return": [13] }
+  },
+  2: {
+    step1: { trait: "Aerobic", attribute: "Size", range: [1, 3] },
+    step2: { "Site 2": [91, 30, 4, 58], "Site 3": [69, 42, 99], "Return": [2, 10, 72] },
+    step3: [8, 15, 60, 44],
+    step4best: 100,
+    step4combos: [[20,46,8],[20,8,15],[20,8,44],[46,16,8],[16,8,15]],
+    step5: { "Site 3": [69], "Return": [42, 99] }
+  },
+  3: {
+    step1: { trait: "Heat Resistant", attribute: "Mobility", range: [8, 10] },
+    step2: { "Site 3": [96, 80, 89, 39], "Return": [73, 27, 6, 47, 1, 66] },
+    step3: [84, 37, 70, 86],
+    step4best: 80,
+    step4combos: [
+      [36,97,34],[36,84,37],[36,84,70],[36,84,86],[36,37,70],[36,37,86],[36,70,86],
+      [37,70,86]
+    ],
+    step5: null
+  }
+};
+
+/* ====================================================================
+   A very small test harness. No library — just a list of results.
+   ==================================================================== */
+var GROUPS = [];
+var current = null;
+
+function group(name) {
+  current = { name: name, rows: [], failed: 0 };
+  GROUPS.push(current);
+}
+
+/* Record one check. `expected` and `actual` are only shown when it fails. */
+function check(label, passed, expected, actual) {
+  if (!passed) current.failed++;
+  current.rows.push({
+    label: label,
+    passed: !!passed,
+    expected: expected,
+    actual: actual
+  });
+}
+
+/* Compare two things by value, not by identity. Object key order is
+   ignored, because {a:1,b:2} and {b:2,a:1} are the same answer. */
+function same(a, b) { return stable(a) === stable(b); }
+
+function stable(v) {
+  if (v === null || v === undefined) return String(v);
+  if (Array.isArray(v)) return "[" + v.map(stable).join(",") + "]";
+  if (typeof v === "object") {
+    var keys = Object.keys(v).sort();
+    return "{" + keys.map(function (k) { return k + ":" + stable(v[k]); }).join(",") + "}";
+  }
+  return JSON.stringify(v);
+}
+
+/* A group of three microbes, written so that order does not matter. */
+function comboText(names) { return names.slice().sort().join(" + "); }
+function comboSet(list) { return list.map(comboText).sort(); }
+
+/* Does any error message contain this piece of text? */
+function anyErrorContains(errors, needle) {
+  for (var i = 0; i < errors.length; i++) {
+    if (errors[i].text.indexOf(needle) !== -1) return true;
+  }
+  return false;
+}
+
+/* ====================================================================
+   Load the data, then run everything.
+   ==================================================================== */
+function loadJSON(path) {
+  return fetch(path, { cache: "no-store" }).then(function (response) {
+    if (!response.ok) throw new Error(path + " could not be loaded (" + response.status + ")");
+    return response.json();
+  });
+}
+
+var SITES = null;
+var FILES = {};
+
+loadJSON("data/sites.json").then(function (sites) {
+  SITES = sites;
+  var names = [];
+  sites.sites.forEach(function (s) {
+    if (names.indexOf(s.step2File) === -1) names.push(s.step2File);
+    if (names.indexOf(s.step34File) === -1) names.push(s.step34File);
+  });
+  return Promise.all(names.map(function (name) {
+    return loadJSON("data/" + name).then(function (file) { FILES[name] = file; });
+  }));
+}).then(function () {
+  runAllGroups();
+  render();
+}).catch(function (err) {
+  document.getElementById("banner").className = "fail";
+  document.getElementById("banner").textContent = "FAILED: could not load the data files — " + err.message;
+});
+
+/* ==================================================================== */
+function runAllGroups() {
+  group1DataValidation();
+  group2AnswerKey();
+  group3KnownWrong();
+  group4PoolDependence();
+  group5Invariants();
+}
+
+/* --------------------------------------------------------------------
+   GROUP 1 — Data validation
+
+   The seven real files must pass. A deliberately broken copy must be
+   rejected, and rejected for the right reasons.
+   -------------------------------------------------------------------- */
+function group1DataValidation() {
+  group("1. Data validation");
+
+  var real = MARKING.validateData(SITES, FILES);
+  check("the seven real data files pass validation", real.ok, "no errors",
+    real.errors.map(function (e) { return e.text; }));
+  check("the real data files raise no warnings either", real.warnings.length === 0,
+    0, real.warnings.map(function (e) { return e.text; }));
+
+  /* A broken Step 2 file: 11 rows, a duplicate name on row 8, a value of
+     11 on row 9, and a trait that does not exist on row 10. */
+  var brokenRows = [];
+  for (var i = 1; i <= 7; i++) {
+    brokenRows.push({ Name: "Microbe 10" + i, Rigidity: 5, Mobility: 5, Size: 5, Trait: "Aerobic" });
+  }
+  brokenRows.push({ Name: "Microbe 101", Rigidity: 5, Mobility: 5, Size: 5, Trait: "Aerobic" });   // row 8: duplicate
+  brokenRows.push({ Name: "Microbe 109", Rigidity: 11, Mobility: 5, Size: 5, Trait: "Aerobic" });  // row 9: 11 is too big
+  brokenRows.push({ Name: "Microbe 110", Rigidity: 5, Mobility: 5, Size: 5, Trait: "Slippery" });  // row 10: no such trait
+  brokenRows.push({ Name: "Microbe 111", Rigidity: 5, Mobility: 5, Size: 5, Trait: "Aerobic" });   // row 11: one row too many
+
+  var goodStep34Name = SITES.sites[0].step34File;
+  var brokenSites = {
+    timeLimitMinutes: 30,
+    sliderSpan: 3,
+    sites: [{
+      id: 1, label: "Site 1",
+      ranges: { Rigidity: [8, 10], Mobility: [4, 6], Size: [2, 4] },
+      desired: "Pressure Resistant", undesired: "Aerobic",
+      nextSitePreview: null,
+      step1Expected: { trait: "Pressure Resistant", attribute: "Rigidity", range: [8, 10] },
+      step2File: "broken-step-2.json",
+      step34File: goodStep34Name
+    }]
+  };
+  var brokenFiles = { "broken-step-2.json": { Sheet1: brokenRows } };
+  brokenFiles[goodStep34Name] = FILES[goodStep34Name];
+
+  var broken = MARKING.validateData(brokenSites, brokenFiles);
+  var texts = broken.errors;
+  check("a broken microbe file is rejected", broken.ok === false, "rejected", "accepted");
+  check("… 11 rows is reported",
+    anyErrorContains(texts, "exactly 10 rows, but has 11"),
+    "an error saying \"exactly 10 rows, but has 11\"", texts.map(function (e) { return e.text; }));
+  check("… the duplicate name on row 8 is reported",
+    anyErrorContains(texts, "row 8: Name \"Microbe 101\" appears more than once"),
+    "an error naming row 8 and the duplicate", texts.map(function (e) { return e.text; }));
+  check("… the value of 11 on row 9 is reported",
+    anyErrorContains(texts, "row 9: Rigidity must be a whole number from 1 to 10, but is 11"),
+    "an error naming row 9 and the value 11", texts.map(function (e) { return e.text; }));
+  check("… the invented trait on row 10 is reported",
+    anyErrorContains(texts, "row 10: Trait \"Slippery\" is not one of"),
+    "an error naming row 10 and the trait", texts.map(function (e) { return e.text; }));
+
+  /* A broken sites.json: the same trait used as both desired and
+     undesired, a Step 1 range that the slider could never select, and a
+     next-site preview left on the last site. */
+  var brokenSites2 = {
+    timeLimitMinutes: 30,
+    sliderSpan: 3,
+    sites: [{
+      id: 1, label: "Site 1",
+      ranges: { Rigidity: [8, 10], Mobility: [4, 6], Size: [2, 4] },
+      desired: "Aerobic", undesired: "Aerobic",
+      nextSitePreview: { kind: "attribute", name: "Rigidity", range: [4, 6] },
+      step1Expected: { trait: "Aerobic", attribute: "Rigidity", range: [8, 9] },
+      step2File: SITES.sites[0].step2File,
+      step34File: goodStep34Name
+    }]
+  };
+  var files2 = {};
+  files2[SITES.sites[0].step2File] = FILES[SITES.sites[0].step2File];
+  files2[goodStep34Name] = FILES[goodStep34Name];
+  var broken2 = MARKING.validateData(brokenSites2, files2);
+
+  check("a broken sites.json is rejected", broken2.ok === false, "rejected", "accepted");
+  check("… desired and undesired being the same trait is reported",
+    anyErrorContains(broken2.errors, "desired and undesired trait are both"),
+    "an error about desired == undesired", broken2.errors.map(function (e) { return e.text; }));
+  check("… a Step 1 range the slider cannot select is reported",
+    anyErrorContains(broken2.errors, "is 2 values wide, but sliderSpan is 3"),
+    "an error about the range width", broken2.errors.map(function (e) { return e.text; }));
+  check("… a preview left on the last site is reported",
+    anyErrorContains(broken2.errors, "the last site must have nextSitePreview set to null"),
+    "an error about the last site's preview", broken2.errors.map(function (e) { return e.text; }));
+}
+
+/* --------------------------------------------------------------------
+   GROUP 2 — Reproducing the published answer key
+
+   Play the key's own answers through the engine. Everything must mark
+   correct, and the best-possible scores and combination lists must match
+   the document exactly.
+   -------------------------------------------------------------------- */
+
+/* Build a complete set of answers straight from the transcribed key. */
+function answersFromKey() {
+  var answers = { startedAt: "2026-09-04T00:00:00Z", sites: {} };
+  SITES.sites.forEach(function (site, index) {
+    var K = KEY[site.id];
+    var given = {};
+
+    given.step1 = {
+      items: [
+        { trait: K.step1.trait },
+        { attribute: K.step1.attribute, range: K.step1.range.slice() }
+      ],
+      secondsLeft: 1700
+    };
+
+    var step2 = {};
+    Object.keys(K.step2).forEach(function (destination) {
+      K.step2[destination].forEach(function (n) {
+        step2[m(n)] = { choice: destination, secondsLeft: 1600 };
+      });
+    });
+    given.step2 = step2;
+
+    given.step3 = K.step3.map(function (n) {
+      return { microbe: m(n), secondsLeft: 1500 };
+    });
+
+    /* Any of the key's listed combinations is a best answer; take the
+       first one it prints. */
+    given.step4 = { microbes: K.step4combos[0].map(m), secondsLeft: 1400 };
+
+    if (K.step5) {
+      var step5 = {};
+      Object.keys(K.step5).forEach(function (destination) {
+        K.step5[destination].forEach(function (n) {
+          step5[m(n)] = { choice: destination, secondsLeft: 1300 };
+        });
+      });
+      given.step5 = step5;
+    }
+
+    answers.sites[String(site.id)] = given;
+  });
+  return answers;
+}
+
+function group2AnswerKey() {
+  group("2. Reproducing the published answer key");
+
+  var result = MARKING.markGame(SITES, FILES, answersFromKey());
+  var derived = MARKING.answerKey(SITES, FILES);
+
+  SITES.sites.forEach(function (site, index) {
+    var K = KEY[site.id];
+    var got = result.sites[String(site.id)];
+    var label = "Site " + site.id;
+
+    check(label + " Step 1 — both items correct",
+      got.step1.correct === 2 && got.step1.of === 2,
+      "2 of 2", got.step1.correct + " of " + got.step1.of);
+    check(label + " Step 2 — all 10 correct", got.step2.correct === 10 && got.step2.of === 10,
+      "10 of 10", got.step2.correct + " of " + got.step2.of);
+    check(label + " Step 3 — all 4 correct", got.step3.correct === 4 && got.step3.of === 4,
+      "4 of 4", got.step3.correct + " of " + got.step3.of);
+    check(label + " Step 4 — scores the key's best of " + K.step4best + "%",
+      got.step4.score === K.step4best, K.step4best, got.step4.score);
+    check(label + " Step 4 — counted as the best available",
+      got.step4.optimal === true, true, got.step4.optimal);
+    check(label + " Step 4 — best overall is " + K.step4best + "%",
+      got.step4.bestOverall === K.step4best, K.step4best, got.step4.bestOverall);
+
+    /* The engine's own list of best combinations, against the key's. */
+    var keySide = comboSet(K.step4combos.map(function (c) { return c.map(m); }));
+    var engineSide = comboSet(derived.sites[index].step4.combos);
+    check(label + " Step 4 — " + K.step4combos.length + " best combinations, same set as the key",
+      same(keySide, engineSide), keySide, engineSide);
+
+    /* Step 3 picks, in set order. */
+    var enginePicks = derived.sites[index].step3.map(function (s) { return s.expected[0]; });
+    check(label + " Step 3 — the key's four picks",
+      same(enginePicks, K.step3.map(m)), K.step3.map(m), enginePicks);
+
+    if (K.step5 === null) {
+      check(label + " Step 5 — does not apply (no next site)",
+        got.step5.applicable === false, false, got.step5.applicable);
+    } else {
+      var of5 = 0;
+      Object.keys(K.step5).forEach(function (d) { of5 += K.step5[d].length; });
+      check(label + " Step 5 — all " + of5 + " correct",
+        got.step5.correct === of5 && got.step5.of === of5,
+        of5 + " of " + of5, got.step5.correct + " of " + got.step5.of);
+    }
+  });
+
+  check("every decision in the key marks correct",
+    result.summary.decisionsCorrect === result.summary.decisionsOf,
+    "all correct", result.summary.decisionsCorrect + " of " + result.summary.decisionsOf);
+  check("the three scores are 80, 100, 80",
+    same(result.summary.step4Scores, [80, 100, 80]), [80, 100, 80], result.summary.step4Scores);
+  check("the three best-possible scores are 80, 100, 80",
+    same(result.summary.bestOverall, [80, 100, 80]), [80, 100, 80], result.summary.bestOverall);
+  check("no answer counts as after time", result.summary.lateAnswers === 0, 0, result.summary.lateAnswers);
+  check("the game counts as finished", result.summary.finished === true, true, result.summary.finished);
+}
+
+/* --------------------------------------------------------------------
+   GROUP 3 — Deliberately wrong answers
+
+   One hand-written run containing, on purpose: a Step 1 with the wrong
+   attribute; a Step 2 microbe sent the wrong way; a Step 3 pick that is
+   not the expected one; a Step 4 trio carrying the undesired trait; a
+   Step 4 trio with none of the desired trait; a site where nothing was
+   sent forward, so there is no Step 5; a whole site never attempted; and
+   two answers given after the clock ran out.
+
+   Every expected mark below was worked out by hand from the data first.
+   -------------------------------------------------------------------- */
+function wrongAnswers() {
+  var at = function (choice, seconds) {
+    return { choice: choice, secondsLeft: seconds === undefined ? 1000 : seconds };
+  };
+  return {
+    startedAt: "2026-09-04T00:00:00Z",
+    sites: {
+      "1": {
+        /* right trait, wrong attribute → 1 of 2 */
+        step1: { items: [{ trait: "Pressure Resistant" },
+                         { attribute: "Mobility", range: [4, 6] }], secondsLeft: 1700 },
+        /* Microbe 7 sent back although it belonged at Site 1 → 9 of 10 */
+        step2: {
+          "Microbe 32": at("Site 2"), "Microbe 7": at("Return"), "Microbe 13": at("Site 2"),
+          "Microbe 79": at("Site 1"), "Microbe 11": at("Site 1"), "Microbe 51": at("Site 1"),
+          "Microbe 92": at("Return"), "Microbe 41": at("Return"), "Microbe 53": at("Return"),
+          "Microbe 98": at("Site 1")
+        },
+        /* Set 1 answered with Microbe 14 instead of Microbe 43 → 3 of 4 */
+        step3: [{ microbe: "Microbe 14", secondsLeft: 1600 },
+                { microbe: "Microbe 75", secondsLeft: 1590 },
+                { microbe: "Microbe 48", secondsLeft: 1580 },
+                { microbe: "Microbe 19", secondsLeft: 1570 }],
+        /* Microbe 9 is Aerobic, Site 1's undesired trait. Given after time. */
+        step4: { microbes: ["Microbe 9", "Microbe 21", "Microbe 81"], secondsLeft: -10 },
+        /* Microbe 13 kept when it should have been returned. Given after time. */
+        step5: { "Microbe 32": at("Site 2"), "Microbe 13": at("Site 2", -5) }
+      },
+      "2": {
+        step1: { items: [{ trait: "Aerobic" },
+                         { attribute: "Size", range: [1, 3] }], secondsLeft: 1200 },
+        /* nothing is sent forward at all, so Site 2 has no Step 5 */
+        step2: {
+          "Microbe 91": at("Site 2"), "Microbe 30": at("Site 2"), "Microbe 2": at("Return"),
+          "Microbe 10": at("Return"), "Microbe 69": at("Return"), "Microbe 4": at("Site 2"),
+          "Microbe 42": at("Return"), "Microbe 99": at("Return"), "Microbe 72": at("Return"),
+          "Microbe 58": at("Site 2")
+        },
+        step3: [{ microbe: "Microbe 8", secondsLeft: 1100 },
+                { microbe: "Microbe 15", secondsLeft: 1090 },
+                { microbe: "Microbe 60", secondsLeft: 1080 },
+                { microbe: "Microbe 44", secondsLeft: 1070 }],
+        /* none of these three is Aerobic, Site 2's desired trait */
+        step4: { microbes: ["Microbe 20", "Microbe 77", "Microbe 16"], secondsLeft: 1000 }
+      },
+      /* never attempted */
+      "3": {}
+    }
+  };
+}
+
+function group3KnownWrong() {
+  group("3. Deliberately wrong answers");
+
+  var r = MARKING.markGame(SITES, FILES, wrongAnswers());
+  var s1 = r.sites["1"], s2 = r.sites["2"], s3 = r.sites["3"];
+
+  /* ---- Site 1 ---- */
+  check("Site 1 Step 1 — the wrong attribute scores 1 of 2",
+    s1.step1.correct === 1 && s1.step1.of === 2, "1 of 2", s1.step1.correct + " of " + s1.step1.of);
+  check("Site 1 Step 1 — the trait is right and the attribute is wrong",
+    same(s1.step1.items.map(function (i) { return i.correct; }), [true, false]),
+    [true, false], s1.step1.items.map(function (i) { return i.correct; }));
+  check("Site 1 Step 2 — 9 of 10",
+    s1.step2.correct === 9 && s1.step2.of === 10, "9 of 10", s1.step2.correct + " of " + s1.step2.of);
+  check("Site 1 Step 2 — Microbe 7 is the one marked wrong, and belonged at Site 1",
+    same(s1.step2.items.filter(function (i) { return !i.correct; })
+           .map(function (i) { return [i.microbe, i.candidate, i.expected]; }),
+         [["Microbe 7", "Return", "Site 1"]]),
+    [["Microbe 7", "Return", "Site 1"]],
+    s1.step2.items.filter(function (i) { return !i.correct; })
+      .map(function (i) { return [i.microbe, i.candidate, i.expected]; }));
+  check("Site 1 Step 3 — 3 of 4",
+    s1.step3.correct === 3 && s1.step3.of === 4, "3 of 4", s1.step3.correct + " of " + s1.step3.of);
+  check("Site 1 Step 3 — Set 1 is the wrong one, Microbe 43 was expected",
+    same(s1.step3.items.filter(function (i) { return !i.correct; })
+           .map(function (i) { return [i.set, i.candidate, i.expected]; }),
+         [["Set 1", "Microbe 14", ["Microbe 43"]]]),
+    [["Set 1", "Microbe 14", ["Microbe 43"]]],
+    s1.step3.items.filter(function (i) { return !i.correct; })
+      .map(function (i) { return [i.set, i.candidate, i.expected]; }));
+  check("Site 1 Step 4 — scores 40%",
+    s1.step4.score === 40, 40, s1.step4.score);
+  check("Site 1 Step 4 — the undesired trait is detected",
+    s1.step4.penalties.indexOf("Microbe 9 carries Aerobic, the undesired trait (−20%)") !== -1,
+    "a penalty naming Microbe 9 and Aerobic", s1.step4.penalties);
+  check("Site 1 Step 4 — three penalties: Rigidity, Size and the undesired trait",
+    same(s1.step4.penalties,
+      ["Rigidity average 5.67 is outside 8–10 (−20%)",
+       "Size average 4.67 is outside 2–4 (−20%)",
+       "Microbe 9 carries Aerobic, the undesired trait (−20%)"]),
+    ["Rigidity average 5.67 is outside 8–10 (−20%)",
+     "Size average 4.67 is outside 2–4 (−20%)",
+     "Microbe 9 carries Aerobic, the undesired trait (−20%)"], s1.step4.penalties);
+  check("Site 1 Step 4 — averages are R 5.67, M 4, S 4.67",
+    same(s1.step4.averages, { Rigidity: 5.67, Mobility: 4, Size: 4.67 }),
+    { Rigidity: 5.67, Mobility: 4, Size: 4.67 }, s1.step4.averages);
+  check("Site 1 Step 4 — not the best that pool allowed",
+    s1.step4.optimal === false && s1.step4.bestForYourPool === 80,
+    "optimal false, best for pool 80", s1.step4.optimal + ", " + s1.step4.bestForYourPool);
+  check("Site 1 Step 4 — flagged as given after time",
+    s1.step4.late === true, true, s1.step4.late);
+  check("Site 1 Step 5 — applies, and scores 1 of 2",
+    s1.step5.applicable === true && s1.step5.correct === 1 && s1.step5.of === 2,
+    "applies, 1 of 2", s1.step5.applicable + ", " + s1.step5.correct + " of " + s1.step5.of);
+  check("Site 1 Step 5 — Microbe 13 was wrong and is flagged after time",
+    same(s1.step5.items.filter(function (i) { return !i.correct; })
+           .map(function (i) { return [i.microbe, i.candidate, i.expected, i.late]; }),
+         [["Microbe 13", "Site 2", "Return", true]]),
+    [["Microbe 13", "Site 2", "Return", true]],
+    s1.step5.items.filter(function (i) { return !i.correct; })
+      .map(function (i) { return [i.microbe, i.candidate, i.expected, i.late]; }));
+
+  /* ---- Site 2 ---- */
+  check("Site 2 Step 1 — 2 of 2", s2.step1.correct === 2, "2 of 2",
+    s2.step1.correct + " of " + s2.step1.of);
+  check("Site 2 Step 2 — 7 of 10 (the three meant for Site 3 were returned)",
+    s2.step2.correct === 7 && s2.step2.of === 10, "7 of 10",
+    s2.step2.correct + " of " + s2.step2.of);
+  check("Site 2 Step 3 — 4 of 4", s2.step3.correct === 4, "4 of 4",
+    s2.step3.correct + " of " + s2.step3.of);
+  check("Site 2 Step 4 — scores 60%", s2.step4.score === 60, 60, s2.step4.score);
+  check("Site 2 Step 4 — two penalties: Size, and no desired trait",
+    same(s2.step4.penalties,
+      ["Size average 4.00 is outside 1–2 (−20%)",
+       "None of the three carries Aerobic, the desired trait (−20%)"]),
+    ["Size average 4.00 is outside 1–2 (−20%)",
+     "None of the three carries Aerobic, the desired trait (−20%)"], s2.step4.penalties);
+  check("Site 2 Step 5 — does not apply, because nothing was sent forward",
+    s2.step5.applicable === false, false, s2.step5.applicable);
+
+  /* ---- Site 3 ---- */
+  check("Site 3 — every step counts as unanswered",
+    s3.step1.answered === false && s3.step2.answered === false &&
+    s3.step3.answered === false && s3.step4.answered === false,
+    "all four unanswered",
+    [s3.step1.answered, s3.step2.answered, s3.step3.answered, s3.step4.answered]);
+  check("Site 3 — an unanswered site scores nothing",
+    s3.step1.correct === 0 && s3.step2.correct === 0 &&
+    s3.step3.correct === 0 && s3.step4.score === 0,
+    "0 everywhere",
+    [s3.step1.correct, s3.step2.correct, s3.step3.correct, s3.step4.score]);
+  check("Site 3 — the items still count towards the total",
+    s3.step1.of === 2 && s3.step2.of === 10 && s3.step3.of === 4,
+    "2, 10 and 4", [s3.step1.of, s3.step2.of, s3.step3.of]);
+
+  /* ---- summary ---- */
+  check("summary — the three scores are 40, 60, 0",
+    same(r.summary.step4Scores, [40, 60, 0]), [40, 60, 0], r.summary.step4Scores);
+  check("summary — the best possible is still 80, 100, 80",
+    same(r.summary.bestOverall, [80, 100, 80]), [80, 100, 80], r.summary.bestOverall);
+  check("summary — 27 of 50 decisions correct",
+    r.summary.decisionsCorrect === 27 && r.summary.decisionsOf === 50,
+    "27 of 50", r.summary.decisionsCorrect + " of " + r.summary.decisionsOf);
+  check("summary — 2 answers were given after time",
+    r.summary.lateAnswers === 2, 2, r.summary.lateAnswers);
+  check("summary — the game does not count as finished",
+    r.summary.finished === false, false, r.summary.finished);
+}
+
+/* --------------------------------------------------------------------
+   GROUP 4 — The best score depends on the candidate's own picks
+
+   This is the reason marking has to be a rules engine rather than a
+   lookup of the answer key. At Site 2 only some Step 3 choices leave
+   100% reachable; the rest cap at 80%.
+   -------------------------------------------------------------------- */
+function group4PoolDependence() {
+  group("4. The best score depends on the candidate's Step 3 picks");
+
+  SITES.sites.forEach(function (site) {
+    var rows = MARKING.rowsOf(FILES[site.step34File]);
+    var groups = MARKING.groupByCategory(rows);
+    var existing = groups[MARKING.EXISTING];
+    var sets = MARKING.SET_NAMES.map(function (n) { return groups[n]; });
+
+    var tally = {};
+    sets[0].forEach(function (a) {
+      sets[1].forEach(function (b) {
+        sets[2].forEach(function (c) {
+          sets[3].forEach(function (d) {
+            var best = MARKING.bestStep4(site, existing.concat([a, b, c, d])).best;
+            tally[best] = (tally[best] || 0) + 1;
+          });
+        });
+      });
+    });
+
+    var expected = site.id === 2 ? { 80: 54, 100: 27 } : { 80: 81 };
+    check("Site " + site.id + " — over all 81 possible Step 3 outcomes: " +
+          (site.id === 2 ? "27 reach 100%, 54 cap at 80%" : "all 81 cap at 80%"),
+      same(tally, expected), expected, tally);
+  });
+}
+
+/* --------------------------------------------------------------------
+   GROUP 5 — Things that must always be true of the engine
+   -------------------------------------------------------------------- */
+function group5Invariants() {
+  group("5. Engine invariants");
+
+  var site1 = SITES.sites[0];
+  var rows = MARKING.rowsOf(FILES[site1.step34File]);
+
+  /* The order the three microbes are submitted in must not change the
+     score. Checked over every trio from a 10-microbe pool. */
+  var groups = MARKING.groupByCategory(rows);
+  var pool = groups[MARKING.EXISTING].concat(
+    MARKING.SET_NAMES.map(function (n) { return groups[n][0]; }));
+  var asymmetric = 0;
+  var offScale = 0;
+  var combosChecked = 0;
+  for (var a = 0; a < pool.length - 2; a++) {
+    for (var b = a + 1; b < pool.length - 1; b++) {
+      for (var c = b + 1; c < pool.length; c++) {
+        var base = MARKING.scoreStep4(site1, [pool[a], pool[b], pool[c]]).score;
+        var orders = [[a, c, b], [b, a, c], [b, c, a], [c, a, b], [c, b, a]];
+        for (var o = 0; o < orders.length; o++) {
+          var t = orders[o];
+          if (MARKING.scoreStep4(site1, [pool[t[0]], pool[t[1]], pool[t[2]]]).score !== base) {
+            asymmetric++;
+          }
+        }
+        if (base % 20 !== 0 || base < 0 || base > 100) offScale++;
+        combosChecked++;
+      }
+    }
+  }
+  check("the score does not depend on the order the three are submitted in (" +
+        combosChecked + " trios × 6 orders)",
+    asymmetric === 0, 0, asymmetric);
+  check("every score is a multiple of 20 between 0 and 100",
+    offScale === 0, 0, offScale);
+
+  /* Averages must be judged in whole numbers. A total of 23 across three
+     microbes is 7.666…, which must count as OUTSIDE a range of 8–10 even
+     though it rounds to 7.67 and someone might round it again to 8. */
+  var fakeSite = {
+    id: 1, label: "Site 1",
+    ranges: { Rigidity: [8, 10], Mobility: [1, 10], Size: [1, 10] },
+    desired: "Pressure Resistant", undesired: "Aerobic"
+  };
+  var mk = function (name, r) {
+    return { Name: name, Rigidity: r, Mobility: 5, Size: 5, Trait: "Pressure Resistant" };
+  };
+  var sum23 = MARKING.scoreStep4(fakeSite, [mk("a", 8), mk("b", 8), mk("c", 7)]);
+  check("a Rigidity total of 23 (average 7.67) counts as outside 8–10",
+    sum23.score === 80 && sum23.penalties.length === 1, "80% with one penalty",
+    sum23.score + "% with " + sum23.penalties.length + " penalt(y/ies)");
+  /* The engine says in-or-out directly, so the results screen never has to
+     work it out from the wording of a penalty message. */
+  check("… and the engine reports Rigidity as outside without being asked twice",
+    sum23.withinRange.Rigidity === false && sum23.withinRange.Mobility === true,
+    "{Rigidity:false, Mobility:true}", JSON.stringify(sum23.withinRange));
+  var sum24 = MARKING.scoreStep4(fakeSite, [mk("a", 8), mk("b", 8), mk("c", 8)]);
+  check("a Rigidity total of 24 (average 8.00) counts as inside 8–10",
+    sum24.score === 100 && sum24.penalties.length === 0, "100% with no penalty",
+    sum24.score + "% with " + sum24.penalties.length + " penalt(y/ies)");
+  var sum30 = MARKING.scoreStep4(fakeSite, [mk("a", 10), mk("b", 10), mk("c", 10)]);
+  check("a Rigidity total of 30 (average 10.00) counts as inside 8–10 — the top of a range is inclusive",
+    sum30.score === 100, 100, sum30.score);
+  var sum31 = MARKING.scoreStep4(fakeSite, [mk("a", 10), mk("b", 10), mk("c", 11)]);
+  check("a Rigidity total of 31 (average 10.33) counts as outside 8–10",
+    sum31.score === 80, 80, sum31.score);
+
+  /* A pool too small to choose three from has no best score at all,
+     rather than a made-up one. */
+  check("a pool of fewer than three microbes has no best score",
+    MARKING.bestStep4(site1, [pool[0], pool[1]]).best === null,
+    null, MARKING.bestStep4(site1, [pool[0], pool[1]]).best);
+
+  /* Every microbe in the real files has an image name the app can ask
+     for; this only checks the names are well formed, not that the files
+     exist, which the app handles with a placeholder. */
+  var badNames = [];
+  Object.keys(FILES).forEach(function (name) {
+    MARKING.rowsOf(FILES[name]).forEach(function (row) {
+      if (!/^Microbe \d+$/.test(MARKING.microbeName(row))) badNames.push(name + ": " + MARKING.microbeName(row));
+    });
+  });
+  check("every microbe is named \"Microbe <number>\"", badNames.length === 0, 0, badNames);
+}
+
+/* ====================================================================
+   Draw the results.
+   ==================================================================== */
+function render() {
+  var totalFailed = 0, totalChecks = 0, firstFailedGroup = null;
+  var html = "";
+
+  GROUPS.forEach(function (g) {
+    totalFailed += g.failed;
+    totalChecks += g.rows.length;
+    if (g.failed > 0 && firstFailedGroup === null) firstFailedGroup = g.name;
+
+    html += "<h2>" + escapeHTML(g.name) +
+            " <span class=\"count\">" + (g.rows.length - g.failed) + " of " + g.rows.length + " passed</span></h2>";
+    html += "<table><tbody>";
+    g.rows.forEach(function (row) {
+      html += "<tr class=\"" + (row.passed ? "pass" : "fail") + "\">";
+      html += "<td class=\"mark\">" + (row.passed ? "✓" : "✗") + "</td>";
+      html += "<td>" + escapeHTML(row.label);
+      if (!row.passed) {
+        html += "<div class=\"detail\"><b>expected:</b> " + escapeHTML(stable(row.expected)) +
+                "\n<b>actual:  </b> " + escapeHTML(stable(row.actual)) + "</div>";
+      }
+      html += "</td></tr>";
+    });
+    html += "</tbody></table>";
+  });
+
+  document.getElementById("results").innerHTML = html;
+
+  var banner = document.getElementById("banner");
+  if (totalFailed === 0) {
+    banner.className = "pass";
+    banner.textContent = "ALL TEST GROUPS PASSED";
+  } else {
+    banner.className = "fail";
+    banner.textContent = "FAILED: " + firstFailedGroup;
+  }
+  document.getElementById("tally").textContent =
+    totalChecks + " checks in " + GROUPS.length + " groups · " +
+    (totalChecks - totalFailed) + " passed · " + totalFailed + " failed";
+
+  /* Left here so that an automated check can read the outcome without
+     having to read the page. Nothing in the product uses it. */
+  window.TEST_SUMMARY = {
+    passed: totalFailed === 0,
+    totalChecks: totalChecks,
+    totalFailed: totalFailed,
+    groups: GROUPS.map(function (g) {
+      return {
+        name: g.name, failed: g.failed, checks: g.rows.length,
+        failures: g.rows.filter(function (r) { return !r.passed; }).map(function (r) {
+          return { label: r.label, expected: stable(r.expected), actual: stable(r.actual) };
+        })
+      };
+    })
+  };
+  window.TESTS_DONE = true;
+}
+
+function escapeHTML(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+</script>
+</body>
+</html>

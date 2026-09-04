@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sea Wolf — answer key</title>
+
+<!--
+  answer-key.html — prints the answer key, worked out from the data files.
+
+  WHY THIS PAGE EXISTS
+  --------------------
+  The answer key used to be a document somebody typed up by hand. If the
+  data ever changed, or a site's target range was corrected, the document
+  quietly went stale — and that is exactly what happened with the Site 3
+  ranges on the old page11.html.
+
+  This page cannot go stale. It works the answers out from the same data
+  files and the same rules the simulation itself marks with, so what it
+  prints is by definition what candidates are marked against.
+
+  HOW TO USE IT
+  -------------
+  Open it from your GitHub Pages address:
+      https://<user>.github.io/<repo>/tools/answer-key.html
+  then use your browser's Print to make a PDF for the course chapter.
+
+  It has to be opened from a web address rather than double-clicked, because
+  it loads the data files and browsers block that from a plain file.
+-->
+
+<style>
+  /* The light background is set on BOTH html and body.
+
+     Setting it on body alone is what caused the page to turn dark once you
+     scrolled past the last site: the body stops where its content stops,
+     and below that you were seeing the browser's own backdrop through it.
+     Putting the colour on html too means the whole page is light however
+     far you scroll. */
+  html {
+    background: #f4f6fa;
+    color-scheme: light;    /* stops a dark-mode browser tinting the page */
+  }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f4f6fa; color: #1a2230;
+    margin: 0; padding: 34px 20px 90px; line-height: 1.6;
+    min-height: 100%;
+    font-variant-numeric: tabular-nums;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  .lede { color: #5b6677; margin: 0 0 12px; }
+  .actions { margin: 0 0 34px; }
+  button {
+    background: #3b82f6; color: #fff; border: none; border-radius: 8px;
+    padding: 9px 20px; font-size: 14px; font-family: inherit; cursor: pointer;
+  }
+  button:hover { background: #2563eb; }
+  .site {
+    background: #fff; border: 1px solid #d7dce5; border-radius: 14px;
+    padding: 30px 34px 34px; margin-bottom: 30px;
+  }
+  h2 { font-size: 21px; margin: 0 0 16px; }
+  .targets {
+    background: #eef2f9; border-radius: 10px; padding: 16px 20px;
+    margin-bottom: 10px; font-size: 14px;
+  }
+  h3 {
+    font-size: 15px; margin: 34px 0 12px;
+    padding-bottom: 8px; border-bottom: 1px solid #d7dce5;
+    letter-spacing: 0.01em;
+  }
+  ul { margin: 12px 0; padding-left: 24px; }
+  li { margin-bottom: 10px; }
+  p  { margin: 12px 0; }
+  .answer { font-weight: 600; }
+  .why { color: #5b6677; font-size: 13.5px; }
+
+  /* Step 4 lists up to 22 combinations. As a run-on block they read as a
+     wall of grey, which is the cluttered look you flagged. They are now a
+     grid of evenly spaced cells that wraps to the page width. */
+  .combos {
+    font-size: 13.5px; color: #3d4757;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+    gap: 10px;
+    margin: 14px 0 6px;
+  }
+  .combos code {
+    background: #f4f6fa; border: 1px solid #e4e9f2;
+    border-radius: 7px; padding: 8px 12px;
+    display: block; text-align: center;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 13px;
+  }
+  table { border-collapse: collapse; margin: 10px 0 6px; }
+  td, th { text-align: left; padding: 7px 26px 7px 0; font-size: 14px; }
+  th { color: #5b6677; font-weight: 600; padding-bottom: 10px; }
+  .error { background: #fef2f6; border: 1px solid #fecaca; color: #991b1b;
+           border-radius: 10px; padding: 18px; }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .actions { display: none; }
+    .site { border-color: #bbb; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Sea Wolf — answer key</h1>
+  <p class="lede" id="lede">Worked out from the data files, not typed in by hand.</p>
+  <div class="actions"><button onclick="window.print()">Print</button></div>
+  <div id="out">Loading…</div>
+</div>
+
+<script src="../js/marking.js"></script>
+<script>
+"use strict";
+
+function loadJSON(path) {
+  return fetch(path, { cache: "no-store" }).then(function (r) {
+    if (!r.ok) throw new Error(path + " (" + r.status + ")");
+    return r.json();
+  });
+}
+
+var SITES = null, FILES = {};
+
+loadJSON("../data/sites.json").then(function (sites) {
+  SITES = sites;
+  var names = [];
+  sites.sites.forEach(function (s) {
+    if (names.indexOf(s.step2File) === -1) names.push(s.step2File);
+    if (names.indexOf(s.step34File) === -1) names.push(s.step34File);
+  });
+  return Promise.all(names.map(function (n) {
+    return loadJSON("../data/" + n).then(function (f) { FILES[n] = f; });
+  }));
+}).then(draw).catch(function (err) {
+  document.getElementById("out").innerHTML =
+    '<div class="error"><strong>Could not load the data files.</strong><br>' +
+    'This page has to be opened from a web address, not double-clicked from your ' +
+    'computer, because browsers block a plain file from reading other files.<br><br>' +
+    'Details: ' + esc(err.message) + '</div>';
+});
+
+function esc(t) {
+  return String(t === null || t === undefined ? "" : t)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function rangeText(r) { return r[0] + "–" + r[1]; }
+
+function draw() {
+  var check = MARKING.validateData(SITES, FILES);
+  if (!check.ok) {
+    document.getElementById("out").innerHTML =
+      '<div class="error"><strong>The data files have problems, so no answer key can be ' +
+      'produced.</strong><ul>' +
+      check.errors.map(function (e) { return "<li>" + esc(e.text) + "</li>"; }).join("") +
+      "</ul></div>";
+    return;
+  }
+
+  document.getElementById("lede").textContent =
+    (SITES.simulation || "Sea Wolf") + " — worked out from the data files by the same " +
+    "rules the simulation marks with. Printed " + new Date().toLocaleDateString() + ".";
+
+  var key = MARKING.answerKey(SITES, FILES);
+  var html = "";
+
+  key.sites.forEach(function (s) {
+    html += '<div class="site"><h2>' + esc(s.label) + '</h2>';
+
+    /* what this site is looking for */
+    html += '<div class="targets"><table><tr>' +
+      Object.keys(s.ranges).map(function (n) {
+        return '<th>' + esc(n) + '</th>';
+      }).join("") +
+      '<th>Desired</th><th>Undesired</th></tr><tr>' +
+      Object.keys(s.ranges).map(function (n) {
+        return '<td>' + esc(rangeText(s.ranges[n])) + '</td>';
+      }).join("") +
+      '<td>' + esc(s.desired) + '</td><td>' + esc(s.undesired) + '</td></tr></table>';
+    if (s.nextSitePreview) {
+      var p = s.nextSitePreview;
+      html += '<div style="margin-top:8px" class="why">Shown of the next site during Step 2: ' +
+        (p.kind === "attribute"
+          ? esc(p.name) + " " + esc(rangeText(p.range))
+          : "undesired trait " + esc(p.trait)) + '</div>';
+    }
+    html += '</div>';
+
+    /* Step 1 */
+    html += '<h3>Step 1 — Characteristics</h3><ul>' +
+      '<li class="answer">' + esc(s.step1.trait) + '</li>' +
+      '<li class="answer">' + esc(s.step1.attribute) + ' ' + esc(rangeText(s.step1.range)) + '</li>' +
+      '</ul><div class="why">The desired trait, and the attribute whose target sits closest ' +
+      'to the ends of the 1–10 scale. The slider always covers three values, so where a ' +
+      'target is only two wide the answer is the three-wide span containing it.</div>';
+
+    /* Step 2 */
+    html += '<h3>Step 2 — Categorisation</h3><ul>';
+    Object.keys(s.step2.groups).forEach(function (destination) {
+      html += '<li><span class="answer">' + esc(destination) + ':</span> ' +
+        esc(s.step2.groups[destination].join(", ")) + '</li>';
+    });
+    html += '</ul><div class="why">Keep it at this site if it does not carry the undesired ' +
+      'trait and at least 2 of its 3 attributes are in range. Otherwise send it on if it ' +
+      'satisfies what is shown of the next site. Otherwise return it.</div>';
+
+    /* Step 3 */
+    html += '<h3>Step 3 — Selection of 4 microbes</h3><ul>';
+    s.step3.forEach(function (set) {
+      html += '<li><span class="answer">' + esc(set.set) + ': ' +
+        esc(set.expected.join(" or ")) + '</span> — <span class="why">' +
+        esc(set.reason) + '</span></li>';
+    });
+    html += '</ul>';
+
+    /* Step 4 */
+    html += '<h3>Step 4 — Submission of 3 microbes</h3>';
+    html += '<p>Best achievable from the answer key\'s pool: <span class="answer">' +
+      s.step4.best + '%</span>' +
+      (s.step4.best < 100 ? ' (100% is not possible at this site)' : '') +
+      ' — ' + s.step4.combos.length + ' combination' +
+      (s.step4.combos.length === 1 ? '' : 's') + ':</p>';
+    html += '<div class="combos">' + s.step4.combos.map(function (c) {
+      return "<code>" + esc(c.join(" + ")) + "</code>";
+    }).join("") + '</div>';
+    html += '<div class="why" style="margin-top:8px">Each site starts at 100% and loses 20 ' +
+      'points for every attribute whose average across the three falls outside the range, ' +
+      '20 if any of the three carries the undesired trait, and 20 if none carries the ' +
+      'desired trait. Note that this list assumes the candidate made the Step 3 picks above; ' +
+      'different Step 3 picks can leave a different best score reachable.</div>';
+
+    /* Step 5 */
+    if (s.step5) {
+      html += '<h3>Step 5 — Confirmation for the next site</h3><ul>';
+      Object.keys(s.step5.groups).forEach(function (destination) {
+        html += '<li><span class="answer">' + esc(destination) + ':</span> ' +
+          esc(s.step5.groups[destination].join(", ")) + '</li>';
+      });
+      html += '</ul><div class="why">Of the microbes sent forward, keep the ones that do not ' +
+        'carry the next site\'s undesired trait and have at least 2 of 3 attributes in its ' +
+        'ranges. Return the rest. Which microbes are asked about depends on what the ' +
+        'candidate actually sent forward.</div>';
+    } else {
+      html += '<h3>Step 5 — Confirmation</h3><p class="why">Does not apply: there is no ' +
+        'site after this one.</p>';
+    }
+
+    html += '</div>';
+  });
+
+  document.getElementById("out").innerHTML = html;
+}
+</script>
+</body>
+</html>

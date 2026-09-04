@@ -1,0 +1,40 @@
+{
+  "simulation": "Sea Wolf — Simulation 1",
+  "timeLimitMinutes": 30,
+  "sliderSpan": 3,
+  "sites": [
+    {
+      "id": 1,
+      "label": "Site 1",
+      "ranges": { "Rigidity": [8, 10], "Mobility": [4, 6], "Size": [2, 4] },
+      "desired": "Pressure Resistant",
+      "undesired": "Aerobic",
+      "nextSitePreview": { "kind": "attribute", "name": "Rigidity", "range": [4, 6] },
+      "step1Expected": { "trait": "Pressure Resistant", "attribute": "Rigidity", "range": [8, 10] },
+      "step2File": "site-1-step-2.json",
+      "step34File": "site-1-step-3&4.json"
+    },
+    {
+      "id": 2,
+      "label": "Site 2",
+      "ranges": { "Rigidity": [4, 6], "Mobility": [6, 8], "Size": [1, 2] },
+      "desired": "Aerobic",
+      "undesired": "Hydrophilic",
+      "nextSitePreview": { "kind": "undesiredTrait", "trait": "Hydrophilic" },
+      "step1Expected": { "trait": "Aerobic", "attribute": "Size", "range": [1, 3] },
+      "step2File": "site-2-step-2.json",
+      "step34File": "site-2-step-3&4.json"
+    },
+    {
+      "id": 3,
+      "label": "Site 3",
+      "ranges": { "Rigidity": [2, 4], "Mobility": [8, 10], "Size": [6, 8] },
+      "desired": "Heat Resistant",
+      "undesired": "Hydrophilic",
+      "nextSitePreview": null,
+      "step1Expected": { "trait": "Heat Resistant", "attribute": "Mobility", "range": [8, 10] },
+      "step2File": "site-3-step-2.json",
+      "step34File": "site-3-step-3&4.json"
+    }
+  ]
+}

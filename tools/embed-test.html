@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embed test</title>
+
+<!--
+  embed-test.html — a throwaway page for finding out how a course lesson
+  actually frames the simulation.
+
+  WHAT IT IS FOR
+  --------------
+  Two questions we cannot answer from here:
+
+    1. Which web address does a Spayee/Graphy lesson actually run under?
+       We think it is either app.casementor.com or casementor.spayee.com,
+       but only the lesson itself can say. The answer goes into
+       `allowedEmbedDomains` in config.js before `blockDirectAccess` is ever
+       switched on.
+
+    2. Does the lesson let the simulation go fullscreen? A page inside a
+       frame can only do that if the surrounding page allows it.
+
+  HOW TO USE IT
+  -------------
+  Put this in a hidden lesson in your course:
+
+      <iframe src="https://<user>.github.io/<repo>/tools/embed-test.html"
+              allowfullscreen allow="fullscreen"
+              style="width:100%;aspect-ratio:16/9;border:0"></iframe>
+
+  Open that lesson on a laptop and on a tablet, and read the two lines
+  marked "WRITE THIS DOWN". Nothing here changes anything; it only reports.
+
+  This page does not block the build. The simulation hides its fullscreen
+  button when fullscreen is not available, and ships with the address check
+  switched off.
+-->
+
+<style>
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f4f6fa; color: #1a2230; margin: 0; padding: 22px;
+    line-height: 1.5; font-size: 15px;
+  }
+  h1 { font-size: 19px; margin: 0 0 14px; }
+  table { border-collapse: collapse; width: 100%; max-width: 900px; background: #fff; }
+  td { border-bottom: 1px solid #d7dce5; padding: 9px 12px; vertical-align: top; }
+  td.k { width: 250px; font-weight: 600; }
+  td.v { font-family: ui-monospace, Consolas, monospace; font-size: 14px; word-break: break-all; }
+  tr.important td { background: #fffbeb; }
+  tr.important td.k::after { content: "  ← WRITE THIS DOWN"; color: #b45309; font-weight: 700; }
+  .yes { color: #16a34a; font-weight: 700; }
+  .no  { color: #dc2626; font-weight: 700; }
+  button {
+    margin-top: 16px; background: #3b82f6; color: #fff; border: none;
+    border-radius: 8px; padding: 10px 20px; font-size: 15px;
+    font-family: inherit; cursor: pointer;
+  }
+  button:hover { background: #2563eb; }
+  #fsresult { margin-top: 10px; font-family: ui-monospace, Consolas, monospace; font-size: 14px; }
+  .note { color: #5b6677; font-size: 13.5px; margin-top: 18px; max-width: 900px; }
+</style>
+</head>
+<body>
+<h1>Embed test</h1>
+<table>
+  <tr class="important">
+    <td class="k">The address the lesson runs under</td>
+    <td class="v" id="parent-origin">—</td>
+  </tr>
+  <tr class="important">
+    <td class="k">Can this go fullscreen?</td>
+    <td class="v" id="fs-enabled">—</td>
+  </tr>
+  <tr><td class="k">Inside a frame?</td><td class="v" id="in-frame">—</td></tr>
+  <tr><td class="k">Raw referrer</td><td class="v" id="referrer">—</td></tr>
+  <tr><td class="k">Size this page has been given</td><td class="v" id="size">—</td></tr>
+  <tr><td class="k">Big enough for the simulation? (needs 900 × 540)</td><td class="v" id="big-enough">—</td></tr>
+  <tr><td class="k">Screen size</td><td class="v" id="screen">—</td></tr>
+  <tr><td class="k">Browser storage reachable?</td><td class="v" id="storage">—</td></tr>
+  <tr><td class="k">Browser</td><td class="v" id="ua">—</td></tr>
+</table>
+
+<button id="fs-try">Try going fullscreen</button>
+<div id="fsresult"></div>
+
+<p class="note">
+  The storage line is for information only. The simulation deliberately does not use
+  browser storage at all, so it does not matter what this says.
+</p>
+
+<script>
+"use strict";
+
+function set(id, text, cls) {
+  var el = document.getElementById(id);
+  el.textContent = text;
+  el.className = "v" + (cls ? " " + cls : "");
+}
+
+function report() {
+  var inFrame = window.self !== window.top;
+  set("in-frame", inFrame ? "yes" : "no — opened directly, not through a lesson");
+
+  var referrer = document.referrer;
+  set("referrer", referrer || "(the browser did not say)");
+
+  var origin = "(could not tell)";
+  var cls = "";
+  if (referrer) {
+    try {
+      origin = new URL(referrer).hostname;
+    } catch (e) {
+      origin = "(the referrer could not be read: " + referrer + ")";
+    }
+  } else if (!inFrame) {
+    origin = "(not in a lesson — open this inside a hidden lesson instead)";
+  } else {
+    origin = "(in a lesson, but the browser did not say which address)";
+  }
+  set("parent-origin", origin, cls);
+
+  var canFull = !!document.fullscreenEnabled;
+  set("fs-enabled", canFull ? "yes" : "no — the simulation will hide its fullscreen button",
+    canFull ? "yes" : "no");
+
+  var w = window.innerWidth, h = window.innerHeight;
+  set("size", w + " x " + h + " pixels");
+  var bigEnough = w >= 900 && h >= 540;
+  set("big-enough", bigEnough ? "yes" : "no — the simulation will ask the visitor to enlarge",
+    bigEnough ? "yes" : "no");
+
+  set("screen", (window.screen ? window.screen.width + " x " + window.screen.height : "unknown") +
+    "  (device pixel ratio " + (window.devicePixelRatio || 1) + ")");
+
+  var storage;
+  try {
+    window.localStorage.setItem("__t", "1");
+    window.localStorage.removeItem("__t");
+    storage = "yes (the simulation does not use it either way)";
+  } catch (e) {
+    storage = "no — blocked here (the simulation does not use it, so this is harmless)";
+  }
+  set("storage", storage);
+
+  set("ua", navigator.userAgent);
+}
+
+report();
+window.addEventListener("resize", report);
+
+document.getElementById("fs-try").addEventListener("click", function () {
+  var out = document.getElementById("fsresult");
+  if (!document.fullscreenEnabled) {
+    out.textContent = "This lesson does not allow fullscreen. Add allowfullscreen and " +
+      'allow="fullscreen" to the iframe tag, then try again.';
+    return;
+  }
+  var request = document.documentElement.requestFullscreen();
+  if (request && request.then) {
+    request.then(function () {
+      out.textContent = "Fullscreen worked. Press Escape to come back.";
+    }).catch(function (err) {
+      out.textContent = "Fullscreen was refused: " + err.message;
+    });
+  } else {
+    out.textContent = "Fullscreen was requested; if the screen did not change, it was refused.";
+  }
+});
+</script>
+</body>
+</html>

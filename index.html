@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sea Wolf — Practice Simulation</title>
+
+<!--
+  index.html — the ONLY page in the simulation.
+
+  Everything the candidate sees is drawn into <div id="app"> by js/app.js.
+  There are no other pages, no page changes and no web address changes: the
+  whole 30 minutes happens here. That is deliberate. The old version was
+  thirteen separate pages that passed answers between themselves through the
+  browser's storage, and that is what caused answers to be duplicated when
+  somebody refreshed or pressed Back.
+
+  The four files loaded below are the whole program:
+
+    config.js       the login settings — the only file you normally edit
+    js/marking.js   the rules of the game and all the marking
+    js/app.js       the screens, the clock and the state
+    css/app.css     how it all looks
+
+  Nothing is loaded from anywhere else on the internet. Nothing is saved in
+  the browser. If you close the tab, the run is gone — same as the real test.
+-->
+
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div id="app"></div>
+
+<!-- Shown only when the window is too small to play in. -->
+<div id="too-small" class="too-small" hidden>
+  <div>
+    Please enlarge your browser window (minimum 900 &times; 540) to use the simulation.
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="js/marking.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+SEA WOLF — HOW TO UPLOAD THIS SO IT ACTUALLY LANDS
+==================================================
+Version 2, 9 April 2026
+
+
+THE ONE MISTAKE TO AVOID
+------------------------
+GitHub's web uploader keeps your folders ONLY if you drag the FOLDERS
+themselves. If you open a folder and drag the files out of it, every file
+lands loose in the root and the site breaks.
+
+So: drag the SIX FOLDERS and the SIX LOOSE FILES listed below. Do not open
+any folder first.
+
+
+WHAT TO DRAG
+------------
+From inside this SW-Rebuild folder, select all of these together
+(click the first, then Ctrl+A selects everything — that is exactly right):
+
+    FOLDERS          FILES
+    css              index.html
+    data             config.js
+    img              tests.html
+    js               README.md
+    reference        UPLOAD-ME-FIRST.txt   (this file - harmless either way)
+    tools
+
+
+STEP BY STEP
+------------
+1.  Go to github.com and create a NEW, EMPTY repository.
+    Suggested name: Modern_SW_2
+    Make it Public. Do NOT tick "Add a README file".
+
+2.  On the empty repository page, click the words
+        "uploading an existing file"
+
+3.  Open this SW-Rebuild folder in File Explorer.
+    Press Ctrl+A to select everything.
+    Drag it all onto the GitHub page in one go.
+
+4.  Wait for the count to finish. It should say 113 files.
+    If it says fewer than 100, something was missed - start again.
+
+5.  Scroll down, click the green "Commit changes" button.
+
+6.  Settings  ->  Pages  ->  Branch: main  ->  Folder: / (root)  ->  Save
+
+7.  Wait two minutes.
+
+
+HOW TO CHECK IT WORKED
+----------------------
+Open:   https://cm-43.github.io/YOUR-REPO-NAME/
+
+On the login screen, bottom right of the white box, you should see:
+
+        v2 - 9 April 2026
+
+If you see that line, the new version is live. If you do not see it, the
+upload did not land or your browser is showing a cached copy - press
+Ctrl+Shift+R to force a fresh load, then look again.
+
+Then open:   https://cm-43.github.io/YOUR-REPO-NAME/tests.html
+It must say ALL TEST GROUPS PASSED, 83 checks, 0 failed.
+
+
+HOW TO TELL THE UPLOAD WENT IN CORRECTLY
+----------------------------------------
+On the repository's main page you should see EXACTLY this:
+
+    css          (folder)
+    data         (folder)
+    img          (folder)
+    js           (folder)
+    reference    (folder)
+    tools        (folder)
+    README.md
+    UPLOAD-ME-FIRST.txt
+    config.js
+    index.html
+    tests.html
+
+If you also see a long list of "Microbe 1.png", "Microbe 10.png" and so on
+sitting loose at the top level, the folders were flattened. Start again with
+a fresh empty repository - it is faster than cleaning it up.
+
+
+THE LOGIN
+---------
+    username:  CaseMentor9187
+    password:  change-me-before-launch
+
+This is a TEMPORARY password and must be changed before launch. See
+section 3 of README.md.
