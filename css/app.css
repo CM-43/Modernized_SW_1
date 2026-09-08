@@ -388,8 +388,23 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
   border-radius: 20px;
   padding: 26px 32px 22px;
 
-  /* Fixed size — see the note above. */
-  width: min(480px, 86vw);
+  /* Fixed size — see the note above.
+
+     600px, up from 480px. At 480px the longest message we show, "Click
+     Continue to move to the next step", wrapped onto two lines with the
+     word "step" alone on the second.
+
+     Measured at the size it actually renders in the game (23px semi-bold,
+     not the smaller login-screen heading an earlier estimate used): that
+     line needs 510px of text width. The popup's 32px of padding each side
+     costs 64px, so 600px gives the text 536px - a comfortable 26px of
+     slack, enough that a slightly longer message would still fit on one
+     line rather than this needing revisiting.
+
+     This ONE number sets the width of every popup, so they all stay
+     identical to each other whatever they say - which is Francesco's rule
+     from the first review round. Do not give any popup a width of its own. */
+  width: min(600px, 86vw);
   height: 216px;
   display: flex;
   flex-direction: column;
@@ -414,7 +429,14 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* `stretch`, not `center`. With `align-items: center` a flex column
+     shrink-wraps its children to their own content width, so the heading
+     never received the popup's full width and wrapped early - "Click
+     Continue to move to the next step" broke onto two lines with "step"
+     alone on the second, even after the popup was widened. The heading is
+     centred by `text-align` below instead, which centres the words without
+     narrowing the box they sit in. */
+  align-items: stretch;
   justify-content: center;
   gap: 8px;
   min-height: 0;
@@ -424,6 +446,7 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
   font-weight: 600;
   line-height: 1.28;
   letter-spacing: -0.01em;
+  text-align: center;
 }
 .modal p {
   color: var(--on-light-muted);
@@ -1039,7 +1062,18 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
      below 58px those two lines have nowhere to go. An earlier version used
      a `vh` measure with no adequate floor, and on a 540px-tall window the
      card collapsed to 35px and its contents piled up on each other. */
-  --mini-card-h:    58px;
+  /* 68px, up from 58px. WK asked for the two rows to stop looking crammed.
+     At a normal window it costs nothing visible: a slot is ~205px tall and
+     the picture area above the card had 143px of it, so the extra 10px
+     comes out of slack the picture was not using.
+
+     On a SHORT window there is no such slack - the whole grid has to fit -
+     so the card eases back towards 58px rather than squeezing the microbe
+     pictures down to nothing. 9vh reaches the full 68px at about 755px of
+     height, which covers the 789px our lessons actually run at and every
+     normal laptop; our 540px minimum lands near 58px, where this card
+     started. Measured at 540, 630, 789 and 1080 pixels of height. */
+  --mini-card-h:    clamp(58px, 9vh, 68px);
   --btn-size:       26px;
   /* The small card's button shrinks a little on a narrow window. At 900px
      the card is only ~118px wide and every pixel the button gives back is a
@@ -1248,6 +1282,10 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
   border-radius: var(--radius-small);
   padding: 5px clamp(5px, 0.6vw, 8px);
   position: relative;         /* the button is positioned against this */
+  /* Lets the rules inside measure against THIS card's width (the cqw unit),
+     rather than the window's. The card and the window do not shrink at the
+     same rate, because the site panel beside them is a fixed width. */
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1256,8 +1294,16 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
 }
 
 /* Row one: the name. */
+/* Same size as the big cards' names (see .cand-card .card-name). They were
+   12px against the big cards' 14px, which WK spotted as an inconsistency.
+
+   14px is the target and is what shows at every normal window size. On a
+   very narrow card - our 900px minimum, where a card is only ~118px wide -
+   it eases back towards 12px, because at 14px "Microbe 21" no longer fits
+   and every name was being cut to "Microb...". 12px remains the project's
+   floor for readable text and is never crossed. */
 .mini-card .mini-name {
-  font-size: max(12px, 0.78em);
+  font-size: clamp(12px, 11.5cqw, 14px);
   font-weight: 600;
   min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1292,26 +1338,84 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
 .mini-stats {
   display: flex;
   align-items: center;
-  gap: clamp(1px, 0.25vw, 3px);
-  font-size: max(12px, 0.78em);
+  /* THE ROW SPREADS TO USE THE SPACE IT IS GIVEN.
+
+     It used to pack everything to the left at a fixed gap, which left real
+     space unused: measured on the tightest card (Microbe 14, values
+     10/8/10) there were 134 spare pixels at 1920px wide and 61 at the
+     1402px our lessons run at, while at our 900px minimum the row is
+     genuinely full. So a fixed gap is either mean at large sizes or too
+     wide at small ones.
+
+     The gap is a percentage of THE CARD's own width (cqw = "container query
+     width"), not of the window. That distinction matters here: the site
+     panel on the right is a fixed 250px, so as the window narrows the cards
+     lose width faster than the window does. A window-based measure was
+     still handing out 6px gaps at 900px when the row could only afford 2px,
+     and the trait icon was pushed off the card's edge.
+
+     Tied to the card, one rule covers every size: roomy where there is room,
+     tight where there is not.
+
+     The gap is only the MINIMUM separation. The real spreading is done by
+     `justify-content: space-between` below, which shares out whatever space
+     is left over after the contents are laid out. That distinction matters:
+     a large gap DEMANDS space and overflows the card when there is none,
+     whereas space-between only ever uses space that is already spare. An
+     earlier attempt used a big gap and pushed the widest card's contents
+     off the edge at 900px; this cannot.
+
+     Verified at 900, 1120, 1402 and 1920 pixels wide, on Microbe 14
+     (values 10/8/10), the widest row in the data. */
+  gap: clamp(1px, 1.6cqw, 10px);
+  /* Spreads the icons and numbers across the full width of the row, using
+     only the space that is genuinely spare. On a wide card that is a lot,
+     and the row breathes; on our narrowest card there is none, and the row
+     simply sits at its minimum gaps instead of overflowing. */
+  justify-content: space-between;
+  /* Same rule as the big cards' stat rows, rather than a slightly smaller
+     one of its own - the other half of the inconsistency WK spotted. The
+     narrow-card easing matches the name above it, so the two stay in
+     proportion with each other at every size. */
+  font-size: clamp(11px, 10cqw, max(12px, 0.8em));
   min-width: 0;
   overflow: hidden;
+  /* A permanently clear strip on the right of this row, sitting directly
+     beneath the round button in the corner above. Reserving it HERE (as
+     padding on the row) rather than as a margin on the trait icon matters:
+     a margin on the last item pushes it outward and can shove it past the
+     card's edge, which is exactly what happened when this was first tried.
+     Padding shrinks the space the contents get instead, so they can never
+     reach the strip. */
+  padding-right: clamp(2px, 4cqw, 14px);
 }
 .mini-stats .num { flex: 0 0 auto; font-weight: 600; }
+/* Sized against the CARD, like the gaps above - on a narrow card these are
+   the pixels the row can most afford to give up, because a slightly smaller
+   picture costs nothing while smaller numbers would cost legibility. */
 .mini-stats img {
-  width: clamp(12px, 1.2vw, 17px);
-  height: clamp(12px, 1.2vw, 17px);
+  width: clamp(11px, 8cqw, 17px);
+  height: clamp(11px, 8cqw, 17px);
   flex: 0 0 auto;
 }
 /* The trait icon: a small gap after the last number, and nothing pushing
    it right. See the note above - this is deliberate. */
+/* The trait icon: a clear step away from the last number, so it reads as a
+   separate thing rather than a fourth attribute. Like the gaps above, the
+   step grows with the window instead of being one fixed number.
+
+   It is still NOT pushed to the card's right edge - see the .mini-card
+   notes. The space left over at the right of this row is what sits under
+   the button in the corner above, and is what stops the two colliding.
+   `margin-right: auto` holds that space open explicitly, so no future
+   change to the gaps can quietly close it. */
 .mini-stats .trait-icon {
   flex: 0 0 auto;
-  margin-left: 5px;
+  margin-left: clamp(4px, 3.5cqw, 18px);
   display: inline-flex;
   align-items: center;
 }
-.mini-stats .trait-icon img { width: clamp(11px, 1.1vw, 17px); height: clamp(11px, 1.1vw, 17px); }
+.mini-stats .trait-icon img { width: clamp(11px, 8cqw, 17px); height: clamp(11px, 8cqw, 17px); }
 /* The mini-card button is smaller, so its glyph is smaller in the same
    proportion. It sits in the header row, so no top/right offsets are needed
    and none can go lopsided. */
