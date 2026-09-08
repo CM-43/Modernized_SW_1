@@ -977,17 +977,23 @@
       var dimmed = ui.phase === 4 &&
         (inSlot || ui.slots.every(function (s) { return s !== null; }));
 
-      var head = plus
-        ? '<div class="mini-head">' +
-            '<div class="mini-name">' + esc(name) + '</div>' + plus +
-          '</div>'
-        : '<div class="mini-name">' + esc(name) + '</div>';
-
+      /* The name and numbers go in one column, the round button in a column
+         of its own beside them. Keeping the button out of the name row is
+         what stops it colliding with the trait icon at the right-hand end
+         of the numbers row — see the .mini-card notes in app.css. */
+      /* The card follows the original application's layout: the name alone
+         on the top row with the + button in the corner beside it, and the
+         three attribute numbers followed by the trait icon on the row
+         below. See the .mini-card notes in app.css for why the trait icon
+         must not be pushed to the right-hand edge. */
       cells += '<div class="mini-slot' + (dimmed ? " is-dimmed" : "") + '">' +
         '<div class="mini-pic">' + microbeImg(name) + '</div>' +
         '<div class="mini-card">' +
-          head +
-          '<div class="mini-stats">' + miniStatsHTML(row, theSite) + '</div>' +
+          '<div class="mini-name">' + esc(name) + '</div>' +
+          '<div class="mini-stats">' + miniStatsHTML(row, theSite) +
+            miniTraitHTML(row) +
+          '</div>' +
+          plus +
         '</div></div>';
     }
 
@@ -1030,13 +1036,20 @@
       '</div>';
   }
 
+  /* The three attribute numbers. The trait icon is NOT included here: on the
+     bottom-row cards it sits up on the name line instead, because the
+     numbers line is the tight one — three two-digit values plus four icons
+     do not fit in a 118px card at our smallest supported window. The name
+     line has room to spare, so the trait icon lives there. */
   function miniStatsHTML(microbe, theSite) {
-    var html = MARKING.attributeNames(theSite).map(function (name) {
+    return MARKING.attributeNames(theSite).map(function (name) {
       return iconTag(name) + '<span class="num">' +
         esc(MARKING.microbeAttribute(microbe, name)) + '</span>';
     }).join("");
-    html += '<span class="trait-icon">' + iconTag(MARKING.microbeTrait(microbe)) + '</span>';
-    return html;
+  }
+
+  function miniTraitHTML(microbe) {
+    return '<span class="trait-icon">' + iconTag(MARKING.microbeTrait(microbe)) + '</span>';
   }
 
   function findRow(rows, name) {

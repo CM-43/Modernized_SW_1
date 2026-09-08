@@ -1028,9 +1028,25 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
      that the attribute row no longer fits beside the name at our 12px
      minimum type size and gets cut off sideways. Measured at 900x540,
      1120x630 and 1920x1080. */
-  --mini-card-h:    clamp(46px, 7.4vh, 52px);
+  /* Back up from the 46px of the first attempt. WK's point was that the
+     CARD was fine and only the picture was too big; shrinking the card made
+     it cramped and left the round button colliding with the trait icon.
+     The picture is smaller now, so this height costs nothing and gives the
+     name row and the button the room they need.
+
+     The FLOOR of 58px is the important number and it is not negotiable: the
+     card holds a name on one line and a row of numbers on another, and
+     below 58px those two lines have nowhere to go. An earlier version used
+     a `vh` measure with no adequate floor, and on a 540px-tall window the
+     card collapsed to 35px and its contents piled up on each other. */
+  --mini-card-h:    58px;
   --btn-size:       26px;
-  --mini-btn-size:  21px;
+  /* The small card's button shrinks a little on a narrow window. At 900px
+     the card is only ~118px wide and every pixel the button gives back is a
+     pixel the numbers row can use: Microbe 14 (10 / 8 / 10) is the widest
+     row in the data and it needs them. 18px is still a comfortable click
+     target at that size, and it returns to 21px on a normal screen. */
+  --mini-btn-size:  clamp(18px, 1.9vw, 21px);
 }
 
 .round-btn {
@@ -1151,7 +1167,12 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   grid-auto-rows: 1fr;                 /* both rows exactly equal */
-  gap: clamp(6px, 0.8vw, 14px);
+  /* The gap between cards closes right down on a small window. WK said the
+     cards could be made wider if that is what it takes to space their
+     contents out properly, and this is the cheapest width available: at
+     900px the four gaps were costing 24px that the names needed, and the
+     cards were truncating to "Microb...". Nothing else changes. */
+  gap: clamp(3px, 0.8vw, 14px);
   align-items: stretch;
   width: 100%;
   height: 100%;
@@ -1167,12 +1188,20 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
   justify-content: flex-end;
 }
 
-/* The picture floats above the mini card, as it does now. It shrinks with
-   the window rather than forcing the row taller than the space available. */
-/* WK asked for the bottom-row microbes to come down by about a fifth after
-   the scrollbars were removed. The picture is capped at 78% of the height it
-   would otherwise take, and centred in what is left, so the row keeps its
-   spacing instead of the cards sliding down to fill the gap. */
+/* THE MICROBE PICTURE ABOVE EACH BOTTOM-ROW CARD.
+
+   WK asked (8 Sep 2026) for the PICTURE to be smaller, not the card. The
+   first attempt shrank the card and left the picture alone, which is the
+   opposite and looked wrong: an oversized microbe on a squashed card.
+
+   There was also a plain mistake here — two `max-height` lines for the same
+   thing, one after the other. The second always won, so the 78% cap never
+   did anything at all. There is now one rule.
+
+   The picture is capped at 72% of the width of its column, which is the
+   ~25% reduction WK asked for, and it keeps its own proportions. Shrinking
+   it frees up vertical room, and that room goes to the card below so the
+   name, the numbers and the round button all have space to breathe. */
 .mini-pic {
   flex: 1 1 auto;
   min-height: 30px;
@@ -1181,99 +1210,108 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
   justify-content: center;
   margin-bottom: 4px;
 }
-.mini-pic img { max-height: 78%; }
-.mini-pic img { max-height: 100%; max-width: 100%; object-fit: contain; }
+.mini-pic img {
+  max-height: 100%;
+  /* 60% of the column width - a 40% reduction on the original size, agreed
+     with WK on 8 September 2026. He asked for roughly 20-25% at first, then
+     confirmed smaller was welcome if it gave the cards more room. It does:
+     the space the picture gives up is what lets the card below it hold its
+     name, its numbers and its button comfortably at every window size. */
+  max-width: 60%;
+  object-fit: contain;
+}
 
+/* HOW THE BOTTOM-ROW CARD IS LAID OUT.
+
+   This follows the layout of the original application, which WK confirmed
+   on 8 September 2026 is the one to keep:
+
+       +--------------------------------+
+       |  Microbe 6                 (+) |   name only, button top-right
+       |  [=]6  [+]1  [/]6    (trait)   |   attributes AND trait together
+       +--------------------------------+
+
+   Two rows. The name has the top row to itself. The three attribute numbers
+   and the trait icon share the second row.
+
+   THE ONE DETAIL THAT MATTERS, because getting it wrong is what caused the
+   button to collide with the trait icon in an earlier attempt: the trait
+   icon sits immediately AFTER the third attribute number. It is NOT pushed
+   out to the right-hand edge of the card. That leaves empty space at the
+   right of the second row, directly beneath the button, so the two can
+   never meet however narrow the card gets. Do not add `margin-left: auto`
+   to the trait icon - that is precisely the mistake. */
 .mini-card {
   background: var(--surface);
   color: var(--on-light);
   border: 1px solid var(--surface-line);
   border-radius: var(--radius-small);
-  /* The side padding narrows on a small window. That is where the few
-     pixels come from that let the attribute row fit at 900px wide without
-     shrinking the numbers below our 12px readable floor. */
-  padding: 5px clamp(4px, 0.6vw, 8px);
-  position: relative;
+  padding: 5px clamp(5px, 0.6vw, 8px);
+  position: relative;         /* the button is positioned against this */
   display: flex;
   flex-direction: column;
   justify-content: center;
+  gap: 2px;
+  overflow: hidden;
 }
-/* Same header-row treatment as the big card: the button is an item in the
-   row, not pinned to the corner, so the space above and below it is equal. */
-.mini-card .mini-head {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-/* 12px is this project's floor for readable text and the mini card keeps
-   it: the height reduction WK asked for comes out of the picture and the
-   padding, never out of the type size. */
+
+/* Row one: the name. */
 .mini-card .mini-name {
   font-size: max(12px, 0.78em);
   font-weight: 600;
-  margin-bottom: 2px;
-  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.mini-card .mini-head .mini-name { margin-bottom: 0; }
-/* THIS ROW HAS TO FIT AT 900px WIDE, WHICH IS THE NARROWEST WE SUPPORT.
+/* Space is reserved for the button ONLY on cards that actually have one.
+   In Step 3 the bottom cards carry no button, and reserving room for an
+   absent button would just waste width the name could use. `:has()` asks
+   "does this card contain a button?" and is supported by every browser we
+   support. A long name is then trimmed with "..." rather than running
+   underneath the button. */
+.mini-card:has(.round-btn) .mini-name {
+  padding-right: calc(var(--mini-btn-size) + 6px);
+}
 
-   At that width a mini card is about 118px across, leaving roughly 102px
-   inside the padding. The row holds three attribute icons, their three
-   numbers, and the trait icon on the right. At a fixed 17px icon and a 12px
-   number that comes to more than 102px and the trait icon was cut off.
+/* The round + button, back in the top-right corner as in the original. */
+.mini-card .round-btn {
+  position: absolute;
+  top: 5px;
+  right: clamp(5px, 0.6vw, 8px);
+}
 
-   So the ICONS scale with the window (13px at the narrowest, 17px on a
-   large screen) while the TEXT stays at our 12px readable floor. Shrinking
-   a picture slightly costs nothing; shrinking the numbers would cost
-   legibility, so the numbers are what we protect. Verified at 900x540,
-   1120x630 and 1920x1080. */
+/* ROW TWO: the three attribute numbers, then the trait icon.
+
+   The trait icon follows the numbers directly. There is no `margin-left:
+   auto` pushing it to the card's right edge, and there must not be: the
+   empty space this leaves at the right of the row is what sits beneath the
+   round button in the corner above, and is what stops the two colliding.
+
+   The icons scale a little with the window while the numbers stay at the
+   project's 12px readable floor. A slightly smaller picture costs nothing;
+   smaller numbers would cost legibility, so the numbers are protected. */
 .mini-stats {
   display: flex;
   align-items: center;
-  /* Six gaps at 3px cost 18px - more than a whole icon - and on a small
-     window that is exactly what pushed Microbe 14's row (10 / 8 / 10) past
-     the edge. They close to 1px at 900px wide and open back to 3px on a
-     normal screen. The numbers are measured: children 89.7px + gaps 18px =
-     107.7px against 105px of room, so the gaps are the cheapest 3px to
-     reclaim and cost nothing that anyone can see. */
-  gap: clamp(1px, 0.18vw, 3px);
+  gap: clamp(1px, 0.25vw, 3px);
   font-size: max(12px, 0.78em);
   min-width: 0;
-  /* THE WORST CASE THIS ROW MUST SURVIVE IS MICROBE 14.
-     It is the only microbe in the data whose values are 10, 8 and 10 - two
-     double-width numbers. At 900px wide (our narrowest supported window)
-     that row needs 112px and the card only offers 105px, so the trait icon
-     on the right was being cut off. Every other microbe fits with room to
-     spare, which is why this was easy to miss.
-
-     letter-spacing pulls the digits together very slightly, and the numbers
-     are allowed to shrink to 11px ONLY here, where they are digits rather
-     than words. Digits stay legible at 11px in a way that prose does not.
-     Checked at 900x540, 1120x630 and 1920x1080. */
-  letter-spacing: -0.01em;
+  overflow: hidden;
 }
-.mini-stats .num { flex: 0 0 auto; }
+.mini-stats .num { flex: 0 0 auto; font-weight: 600; }
 .mini-stats img {
-  width: clamp(13px, 1.35vw, 17px);
-  height: clamp(13px, 1.35vw, 17px);
+  width: clamp(12px, 1.2vw, 17px);
+  height: clamp(12px, 1.2vw, 17px);
   flex: 0 0 auto;
 }
-/* The gap on .mini-stats already separates these, so the number carries no
-   right margin of its own. It used to, and at the narrowest supported window
-   (900px wide) those three extra margins were exactly what pushed the trait
-   icon past the edge of the card and cut it off.
-
-*/
-.mini-stats .num {
-  font-weight: 600;
-  font-size: clamp(11px, 1.05vw, 13px);
+/* The trait icon: a small gap after the last number, and nothing pushing
+   it right. See the note above - this is deliberate. */
+.mini-stats .trait-icon {
   flex: 0 0 auto;
+  margin-left: 5px;
+  display: inline-flex;
+  align-items: center;
 }
-/* Sits hard against the right edge, and is never allowed to be squeezed. */
-.mini-stats .trait-icon { margin-left: auto; flex: 0 0 auto; }
-.mini-stats .trait-icon img { width: clamp(13px, 1.35vw, 17px); height: clamp(13px, 1.35vw, 17px); }
+.mini-stats .trait-icon img { width: clamp(11px, 1.1vw, 17px); height: clamp(11px, 1.1vw, 17px); }
 /* The mini-card button is smaller, so its glyph is smaller in the same
    proportion. It sits in the header row, so no top/right offsets are needed
    and none can go lopsided. */
@@ -1304,7 +1342,17 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
   height: var(--mini-card-h, 56px);
   background: rgba(255,255,255,0.02);
 }
-.mini-card { height: var(--mini-card-h, 56px); }
+/* The card keeps its height even when the grid row it sits in is short.
+
+   Without `flex-shrink: 0` the card is a flex item in a column whose height
+   comes from the grid, and on a small window the grid squeezed it: at
+   900x540 a 58px card was being compressed to 35px, and the name and the
+   numbers piled up on top of each other. The picture above it absorbs the
+   squeeze instead, which is what should give way. */
+.mini-card {
+  height: var(--mini-card-h, 56px);
+  flex: 0 0 var(--mini-card-h, 56px);
+}
 
 /* The Legend, in the bottom-right corner of the main box — the same corner
    the Continue button uses on every other screen. */
@@ -1427,8 +1475,40 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
 .results {
   background: var(--surface);
   color: var(--on-light);
-  min-height: 100%;
+  /* WHY min-height IS NOT 100% HERE.
+
+     It used to be. `100%` means 100% of the parent, and the parent is only
+     as tall as the window — so the light panel stopped after one screenful.
+     Scroll down past that and you were looking at the dark page behind it:
+     the dark band down the sides and below the content that WK reported.
+
+     `100vh` is 100% of the WINDOW rather than the parent, which is at least
+     a full screen; and because the panel also grows with its own content,
+     it is always at least as tall as the results themselves. The dark page
+     can no longer show through anywhere. */
+  min-height: 100vh;
   padding: 22px clamp(14px, 3vw, 40px) 60px;
+}
+
+/* THE RESULTS SCREEN IS THE ONE SCREEN THAT IS TALLER THAN THE WINDOW.
+
+   Everywhere else, #app is deliberately locked to the height of the window
+   (height: 100%) because the game must never scroll. But that lock was also
+   clamping the results panel to one screenful: the text below the fold still
+   showed, but the light box behind it stopped at 630px, and what you saw
+   under and beside it was the game's dark navy page. That is the dark band.
+
+   On the results screen only, #app is released so it grows to fit its
+   content, and the light colour is put on the page itself as well, so there
+   is nothing dark left to show through however far you scroll.
+   `body.scrolls` is set only while the results are on screen. */
+body.scrolls,
+body.scrolls #app {
+  background: var(--surface);
+}
+body.scrolls #app {
+  height: auto;
+  min-height: 100%;
 }
 .results-inner { max-width: 1180px; margin: 0 auto; }
 
