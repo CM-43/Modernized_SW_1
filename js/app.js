@@ -1041,10 +1041,22 @@
      numbers line is the tight one — three two-digit values plus four icons
      do not fit in a 118px card at our smallest supported window. The name
      line has room to spare, so the trait icon lives there. */
+  /* Each icon is wrapped WITH its own number in a .stat-pair.
+
+     Without the wrapper the row held seven loose items, and the spreading
+     put the same gap between an icon and its own number as between that
+     number and the NEXT icon - measured 26px and 26px at 1920px wide. A
+     number then looked equally attached to the icon on either side of it,
+     which is ambiguous and, as WK put it, makes no sense.
+
+     Pairing them means the row spreads FOUR objects (three attributes and
+     the trait) rather than seven, and the icon-to-number distance inside
+     each pair stays small and fixed at every window size. */
   function miniStatsHTML(microbe, theSite) {
     return MARKING.attributeNames(theSite).map(function (name) {
-      return iconTag(name) + '<span class="num">' +
-        esc(MARKING.microbeAttribute(microbe, name)) + '</span>';
+      return '<span class="stat-pair">' + iconTag(name) +
+        '<span class="num">' +
+        esc(MARKING.microbeAttribute(microbe, name)) + '</span></span>';
     }).join("");
   }
 

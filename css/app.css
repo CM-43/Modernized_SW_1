@@ -1280,7 +1280,13 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
   color: var(--on-light);
   border: 1px solid var(--surface-line);
   border-radius: var(--radius-small);
-  padding: 5px clamp(5px, 0.6vw, 8px);
+  /* 7px of padding plus the card's own 1px border = the 8px of clear space
+     WK asked for above the name and below the numbers. The rows are pushed
+     apart by `justify-content: space-between` below, so whatever height is
+     left over after the padding becomes the gap between them: on a 68px
+     card that is exactly the 14.3px he asked for, and on a shorter card it
+     compresses gracefully rather than overflowing. */
+  padding: 7px clamp(5px, 0.6vw, 8px);
   position: relative;         /* the button is positioned against this */
   /* Lets the rules inside measure against THIS card's width (the cqw unit),
      rather than the window's. The card and the window do not shrink at the
@@ -1288,8 +1294,19 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
   container-type: inline-size;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 2px;
+  /* THE TWO ROWS PUSH APART, they are not centred as a block.
+
+     With `justify-content: center` the card put its spare height OUTSIDE
+     the pair of rows - measured 12.4px above the name, 12.4px below the
+     numbers, and only 2px between them. So the two rows were crammed
+     together while 25px sat unused at the edges, which is what WK saw as
+     the name being "pushed down" with no room to breathe.
+
+     `space-between` puts that space where it is actually wanted: between
+     the two rows. The name rises to the top of the card, the numbers sit at
+     the bottom, and the gap between them is the room. The card's own height
+     is unchanged. */
+  justify-content: space-between;
   overflow: hidden;
 }
 
@@ -1304,7 +1321,10 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
    floor for readable text and is never crossed. */
 .mini-card .mini-name {
   font-size: clamp(12px, 11.5cqw, 14px);
-  font-weight: 600;
+  /* 700 to match the big cards' names (.cand-card .card-name). Standardising
+     the font size last round left the WEIGHT behind at 600, so these names
+     still read as less prominent than the ones above them. */
+  font-weight: 700;
   min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -1338,57 +1358,63 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
 .mini-stats {
   display: flex;
   align-items: center;
-  /* THE ROW SPREADS TO USE THE SPACE IT IS GIVEN.
 
-     It used to pack everything to the left at a fixed gap, which left real
-     space unused: measured on the tightest card (Microbe 14, values
-     10/8/10) there were 134 spare pixels at 1920px wide and 61 at the
-     1402px our lessons run at, while at our 900px minimum the row is
-     genuinely full. So a fixed gap is either mean at large sizes or too
-     wide at small ones.
+  /* HOW THIS ROW SPACES ITSELF.
 
-     The gap is a percentage of THE CARD's own width (cqw = "container query
-     width"), not of the window. That distinction matters here: the site
-     panel on the right is a fixed 250px, so as the window narrows the cards
-     lose width faster than the window does. A window-based measure was
-     still handing out 6px gaps at 900px when the row could only afford 2px,
-     and the trait icon was pushed off the card's edge.
+     Four objects sit here: three attribute pairs (each an icon with its own
+     number - see .stat-pair) and the trait icon. The row is LEFT-ALIGNED
+     and the objects are separated by a gap that grows with the card up to a
+     ceiling. Any width beyond that collects as empty space on the right.
 
-     Tied to the card, one rule covers every size: roomy where there is room,
-     tight where there is not.
+     Two earlier versions of this were wrong in opposite directions, and both
+     are worth remembering:
 
-     The gap is only the MINIMUM separation. The real spreading is done by
-     `justify-content: space-between` below, which shares out whatever space
-     is left over after the contents are laid out. That distinction matters:
-     a large gap DEMANDS space and overflows the card when there is none,
-     whereas space-between only ever uses space that is already spare. An
-     earlier attempt used a big gap and pushed the widest card's contents
-     off the edge at 900px; this cannot.
+     * A FIXED gap left real space unused - measured 106 spare pixels at
+       1402px wide and 176 at 1920px - so the row looked cramped.
+     * `justify-content: space-between` used that space but had no ceiling:
+       at 2560px it was sharing out 281px, and the icons drifted to opposite
+       ends of the card and stopped reading as one row.
 
-     Verified at 900, 1120, 1402 and 1920 pixels wide, on Microbe 14
-     (values 10/8/10), the widest row in the data. */
-  gap: clamp(1px, 1.6cqw, 10px);
-  /* Spreads the icons and numbers across the full width of the row, using
-     only the space that is genuinely spare. On a wide card that is a lot,
-     and the row breathes; on our narrowest card there is none, and the row
-     simply sits at its minimum gaps instead of overflowing. */
-  justify-content: space-between;
-  /* Same rule as the big cards' stat rows, rather than a slightly smaller
-     one of its own - the other half of the inconsistency WK spotted. The
-     narrow-card easing matches the name above it, so the two stay in
-     proportion with each other at every size. */
+     So the gap grows, but only up to 22px - about the height of an icon,
+     which is the point past which the objects stop looking related. The
+     `13cqw - 12px` shape reaches that ceiling around the 1402px window our
+     lessons run at, while the narrowest supported card (~105px of row) is
+     held near the 2px floor so its widest contents still fit - Microbe 14,
+     values 10/8/10. Measured against THE CARD (cqw), not the window,
+     because the fixed 250px site panel means the two do not shrink
+     together. Verified at 900, 1120, 1402, 1920 and 2560 pixels wide. */
+  gap: clamp(2px, calc(13cqw - 12px), 22px);
+  justify-content: flex-start;
+
   font-size: clamp(11px, 10cqw, max(12px, 0.8em));
   min-width: 0;
   overflow: hidden;
+
   /* A permanently clear strip on the right of this row, sitting directly
-     beneath the round button in the corner above. Reserving it HERE (as
-     padding on the row) rather than as a margin on the trait icon matters:
-     a margin on the last item pushes it outward and can shove it past the
-     card's edge, which is exactly what happened when this was first tried.
-     Padding shrinks the space the contents get instead, so they can never
-     reach the strip. */
+     beneath the round button in the corner above. Reserved as PADDING on
+     the row rather than as a margin on the last item: a margin pushes the
+     item outward and can shove it past the card's edge, which is exactly
+     what happened when this was first tried. */
   padding-right: clamp(2px, 4cqw, 14px);
 }
+/* An attribute icon and its number, kept together as one object. The gap
+   inside a pair is small and FIXED - it must not grow with the card, or the
+   number drifts away from the icon it belongs to and the pairing is lost. */
+.mini-stats .stat-pair {
+  display: inline-flex;
+  align-items: center;
+  /* This gap must ALWAYS be smaller than the gap between pairs, or the
+     grouping inverts and a number appears to belong to the next icon along.
+
+     It is therefore expressed as a fraction of that same gap rather than as
+     an independent value: half of it, floored at 1px. Tying the two
+     together means the relationship holds at every window size by
+     construction - an independent value drifted above it on the narrowest
+     card (2.1px against 2.0px) and the pairing silently broke. */
+  gap: max(1px, calc(clamp(2px, calc(13cqw - 12px), 22px) * 0.45));
+  flex: 0 0 auto;
+}
+
 .mini-stats .num { flex: 0 0 auto; font-weight: 600; }
 /* Sized against the CARD, like the gaps above - on a narrow card these are
    the pixels the row can most afford to give up, because a slightly smaller
