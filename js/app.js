@@ -36,24 +36,14 @@
 (function () {
   "use strict";
 
-  /* ======================================================================
-     0. VERSION STAMP
+  /* NOTE ON VERSION NUMBERS
+     There is deliberately no version number or build date anywhere in this
+     application, on screen or in the browser console. A candidate who sees
+     a date thinks the tool is out of date, so we show neither.
 
-     Printed to the browser's console the moment the page loads, so you can
-     always tell which version a web address is actually serving without
-     guessing. Open the page, press F12, click "Console", and read the line.
-
-     If it does not say the version you just uploaded, the browser is
-     showing you a cached copy or the upload did not land — either way you
-     know immediately, instead of hunting for a change that is not there.
-
-     Bump this by hand whenever you upload a new version.
-     ====================================================================== */
-  var VERSION = "v2 — 9 April 2026";
-  try {
-    console.log("%cSea Wolf simulation " + VERSION,
-                "background:#2563eb;color:#fff;padding:3px 9px;border-radius:4px");
-  } catch (e) { /* a console is not guaranteed to exist; never let this stop the game */ }
+     To check which version a web address is actually serving, look at the
+     commit date in the code repository, or search the files for a phrase
+     you know you changed. */
 
   /* ======================================================================
      1. SETTINGS AND SMALL HELPERS
@@ -141,12 +131,26 @@
          site starts, since the cards are gone by then anyway. */
       openCards: {},
       confirmRestart: false,
+      /* "Expand" — the simulation filling the lesson's frame edge to edge.
+         Deliberately not the browser's own fullscreen; see the "fullscreen"
+         case in the click handler for why. Not reset by Restart: if the
+         candidate expanded the view, they want it to stay expanded. */
+      expanded: false,
       loginError: "",
       revealReasons: {}   /* per site, on the results screen                */
     },
 
     result: null          /* the marked game, once the results are shown    */
   };
+
+  /* Adds or removes one class on the page's root element. Everything the
+     expanded view does is CSS on that class; there is no measuring, no
+     resizing and no browser API involved, so nothing can pop up. */
+  function applyExpanded() {
+    try {
+      document.documentElement.classList.toggle("is-expanded", !!state.ui.expanded);
+    } catch (e) { /* never let a display nicety stop the game */ }
+  }
 
   function sites() { return state.data ? state.data.sites : []; }
   function site() { return sites()[state.siteIndex]; }
@@ -347,9 +351,16 @@
      ====================================================================== */
 
   function headerHTML() {
-    var fullscreenButton = document.fullscreenEnabled
-      ? '<button class="btn-fullscreen" data-action="fullscreen" title="Fullscreen">⛶</button>'
-      : "";
+    /* The button shows a cross when we are already filling the screen (or
+       the frame), and the expand arrows otherwise, so it always says what
+       pressing it will do. The browser's own Escape key is handled too —
+       see the fullscreenchange listener near the bottom of this file. */
+    var isBig = !!(typeof document !== "undefined" && document.fullscreenElement) ||
+                state.ui.expanded;
+    var fullscreenButton =
+      '<button class="btn-fullscreen" data-action="fullscreen" title="' +
+      (isBig ? "Exit full screen" : "Full screen") + '">' +
+      (isBig ? "\u2715" : "\u26F6") + '</button>';
     return '' +
       '<div class="header-bar">' +
         '<div class="header-left">' +
@@ -525,8 +536,8 @@
 
   function loginHTML() {
     return '<div class="centre-screen"><div class="panel">' +
-      '<h1>Sea Wolf</h1>' +
-      '<p class="lede">Practice simulation. Please sign in to begin.</p>' +
+      '<h1>Sea Wolf Simulation</h1>' +
+      '<p class="lede">Please sign in to begin.</p>' +
       '<form id="login-form">' +
       '<div class="field"><label for="u">Username</label>' +
       '<input id="u" type="text" autocomplete="username" autocapitalize="off" spellcheck="false"></div>' +
@@ -537,7 +548,6 @@
       '</form>' +
       /* A quiet version line, bottom-right of the login card. It is the
          fastest way to confirm an upload actually landed. */
-      '<div class="version-line">' + esc(VERSION) + '</div>' +
       '</div></div>';
   }
 
@@ -961,12 +971,23 @@
         plus = '<button class="round-btn" data-action="slot" data-name="' + esc(name) + '"' +
           (inSlot || full ? " disabled" : "") + '>+</button>';
       }
-      cells += '<div class="mini-slot">' +
+      /* WK asked that once all three slots are full, or a microbe is already
+         in a slot, the WHOLE tile dims rather than just its button — greying
+         only the button was too quiet to read as "not available". */
+      var dimmed = ui.phase === 4 &&
+        (inSlot || ui.slots.every(function (s) { return s !== null; }));
+
+      var head = plus
+        ? '<div class="mini-head">' +
+            '<div class="mini-name">' + esc(name) + '</div>' + plus +
+          '</div>'
+        : '<div class="mini-name">' + esc(name) + '</div>';
+
+      cells += '<div class="mini-slot' + (dimmed ? " is-dimmed" : "") + '">' +
         '<div class="mini-pic">' + microbeImg(name) + '</div>' +
         '<div class="mini-card">' +
-          '<div class="mini-name">' + esc(name) + '</div>' +
+          head +
           '<div class="mini-stats">' + miniStatsHTML(row, theSite) + '</div>' +
-          plus +
         '</div></div>';
     }
 
@@ -990,9 +1011,20 @@
   function candidateCardHTML(microbe, theSite, buttonHTML) {
     if (!microbe) return '<div class="slot-empty">—</div>';
     var name = MARKING.microbeName(microbe);
+    /* The name and the button share one header row. The empty spacer on the
+       left is the same width as the button, so the name lands in the middle
+       of the card rather than in the middle of whatever is left beside the
+       button. When there is no button the spacer is omitted too, so the name
+       is still centred. */
+    var head = buttonHTML
+      ? '<div class="card-head">' +
+          '<span class="card-head-spacer"></span>' +
+          '<div class="card-name">' + esc(name) + '</div>' +
+          buttonHTML +
+        '</div>'
+      : '<div class="card-head"><div class="card-name">' + esc(name) + '</div></div>';
     return '<div class="cand-card">' +
-      (buttonHTML || "") +
-      '<div class="card-name">' + esc(name) + '</div>' +
+      head +
       '<div class="picture">' + microbeImg(name) + '</div>' +
       statsHTML(microbe, theSite) +
       '</div>';
@@ -1263,6 +1295,16 @@
     document.body.removeChild(link);
   }
 
+  /* The candidate can leave fullscreen with the Escape key rather than the
+     button, and the browser tells nobody. Without this the button would go
+     on showing a cross after they were already back to normal. Redrawing on
+     the browser's own event keeps the button honest however they leave. */
+  document.addEventListener("fullscreenchange", function () {
+    if (!document.fullscreenElement) state.ui.expanded = false;
+    applyExpanded();
+    render();
+  });
+
   /* Printing opens every site so the printed page is complete, then puts
      them back as they were. */
   window.addEventListener("beforeprint", function () {
@@ -1333,10 +1375,67 @@
 
     switch (action) {
 
-      case "fullscreen":
-        if (document.fullscreenElement) document.exitFullscreen();
-        else document.documentElement.requestFullscreen();
+      /* FULLSCREEN.
+
+         WK's ruling of 8 September 2026: real fullscreen matters more than
+         hiding the address. So this asks the browser for true fullscreen —
+         the simulation fills the whole monitor, and the browser's tabs,
+         address bar and the surrounding lesson page all disappear.
+
+         ONE THING TO KNOW, so nobody is caught out by it. On entering
+         fullscreen the browser shows its own short notice, along the lines
+         of "cm-43.github.io is now full screen". That notice is drawn by the
+         BROWSER, on top of the page — not by this page — so nothing here can
+         restyle it, reword it or hide it. It fades on its own after a second
+         or two.
+
+         Nor can we sidestep it by fullscreening the lesson's frame instead
+         (which would name casementor.com): the lesson and the simulation are
+         served from different web addresses, and a browser blocks a page
+         from reaching the frame it sits inside when that is so. Tested, not
+         assumed — window.frameElement comes back unavailable.
+
+         IF YOU WANT THE NOTICE TO NAME YOUR OWN ADDRESS, the way to do it is
+         to serve these same files from a custom domain such as
+         sim.casementor.com. That is a DNS setting plus a one-line CNAME file
+         in the repository, and it changes nothing in this code.
+
+         FALLBACK. A browser refuses fullscreen inside a frame when the
+         lesson's iframe lacks the allowfullscreen attribute. If that ever
+         happens the button still works: it falls back to filling the
+         lesson's frame edge to edge, which is bigger than the default. So
+         the candidate is never left with a button that does nothing. */
+      case "fullscreen": {
+        var inFullscreen = !!document.fullscreenElement;
+
+        if (!inFullscreen && !state.ui.expanded) {
+          /* going in */
+          var root = document.documentElement;
+          var ask = root.requestFullscreen ? root.requestFullscreen() : null;
+          if (ask && ask.then) {
+            ask.catch(function () {
+              /* the browser said no — fill the frame instead */
+              state.ui.expanded = true;
+              applyExpanded();
+              render();
+            });
+          } else if (!ask) {
+            /* no fullscreen support at all — fill the frame instead */
+            state.ui.expanded = true;
+            applyExpanded();
+            render();
+          }
+        } else {
+          /* coming out */
+          if (inFullscreen && document.exitFullscreen) {
+            document.exitFullscreen().catch(function () { });
+          }
+          state.ui.expanded = false;
+          applyExpanded();
+          render();
+        }
         return;
+      }
 
       case "restart":
         state.ui.confirmRestart = true;

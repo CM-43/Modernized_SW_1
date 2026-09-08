@@ -30,23 +30,49 @@
 -->
 
 <style>
-  /* The light background is set on BOTH html and body.
+  /* THE BACKGROUND MUST BE ONE COLOUR, TOP TO BOTTOM, MARGINS INCLUDED.
 
-     Setting it on body alone is what caused the page to turn dark once you
-     scrolled past the last site: the body stops where its content stops,
-     and below that you were seeing the browser's own backdrop through it.
-     Putting the colour on html too means the whole page is light however
-     far you scroll. */
+     WK saw this page start light grey and turn dark part of the way down.
+     There are three separate ways a browser can do that, and all three are
+     closed off below, because only closing one of them is what let it come
+     back the first time:
+
+     1. The colour was on <body> only. The body stops where its content
+        stops, so past that point you see the browser's own backdrop.
+        -> the colour is now on <html> as well.
+
+     2. The browser is in dark mode and re-tints the page.
+        -> color-scheme: light tells it not to.
+
+     3. Something later in this file, or a browser extension, overrides it.
+        -> the html/body colours are marked !important, and a fixed layer
+           sits behind everything as a last resort (see .backdrop below).
+
+     If this page ever looks dark again, it is not this file: it is a stale
+     copy still being served. Check that tools/answer-key.html on GitHub
+     contains the word "backdrop" - if it does not, the upload did not land. */
   html {
-    background: #f4f6fa;
+    background: #f4f6fa !important;
     color-scheme: light;    /* stops a dark-mode browser tinting the page */
+    min-height: 100%;
   }
   body {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    background: #f4f6fa; color: #1a2230;
+    background: #f4f6fa !important; color: #1a2230;
     margin: 0; padding: 34px 20px 90px; line-height: 1.6;
     min-height: 100%;
     font-variant-numeric: tabular-nums;
+  }
+  /* The last-resort layer. It is fixed to the window, so it covers the full
+     width and the full height no matter how far down the page you scroll,
+     and it sits behind every piece of content (z-index: -1). If anything at
+     all fails above, this is still the colour you see. */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: #f4f6fa;
+    z-index: -1;
+    pointer-events: none;
   }
   .wrap { max-width: 940px; margin: 0 auto; }
   h1 { font-size: 26px; margin: 0 0 6px; }
@@ -100,13 +126,16 @@
   .error { background: #fef2f6; border: 1px solid #fecaca; color: #991b1b;
            border-radius: 10px; padding: 18px; }
   @media print {
-    body { background: #fff; padding: 0; }
+    html, body { background: #fff !important; }
+    body { padding: 0; }
+    .backdrop { display: none; }
     .actions { display: none; }
     .site { border-color: #bbb; break-inside: avoid; }
   }
 </style>
 </head>
 <body>
+<div class="backdrop"></div>
 <div class="wrap">
   <h1>Sea Wolf — answer key</h1>
   <p class="lede" id="lede">Worked out from the data files, not typed in by hand.</p>

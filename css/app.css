@@ -232,6 +232,22 @@ small, .small { font-size: max(12px, 0.8em); }
   display: flex;
 }
 
+/* EXPANDED VIEW ("Expand" in the top-right of the header bar)
+
+   This is our replacement for the browser's fullscreen button. We do not
+   use the browser's fullscreen because it always shows a notice naming the
+   web address the simulation is served from, and that notice is drawn by
+   the browser outside the page, so nothing here can change or hide it.
+
+   Instead, Expand simply removes the breathing space around the playing
+   area so the simulation fills the lesson's frame edge to edge. It is
+   ordinary CSS: no browser API is called, so no notice can appear.
+
+   If you ever want to tune how much bigger it gets, the two numbers below
+   are the whole story. */
+html.is-expanded .stage { padding: 0; }
+html.is-expanded .main-box { border-radius: 0; border-width: 0; }
+
 .main-box {
   flex: 1 1 auto;
   min-height: 0;
@@ -927,18 +943,39 @@ small, .small { font-size: max(12px, 0.8em); }
   flex-direction: column;
   overflow: hidden;
 }
-/* Equal padding on BOTH sides, so the name is centred in the card rather
-   than centred in the space left over beside the button. */
+/* THE CARD HEADER ROW
+   -------------------
+   The name and the round button share one row. Before this, the button was
+   pinned to the card's corner with `position: absolute`, which meant its
+   distance to the top edge (9px) and to the bottom edge (197px) were wildly
+   different — the lopsided look WK flagged. It is now an ordinary item in a
+   flex row, so the row's own padding sets the space above and below it and
+   the two are equal by construction, at every card height and every zoom.
+
+   The name is centred in the FULL width of the row, not in the space left
+   over beside the button: an equal-width spacer sits on the left. */
+.cand-card .card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-bottom: 5px;
+}
 .cand-card .card-name {
   font-weight: 700;
   text-align: center;
   font-size: max(14px, 0.95em);
-  margin-bottom: 5px;
-  padding: 0 30px;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Same width as the button, so the name sits in the middle of the card. */
+.cand-card .card-head-spacer {
+  flex: 0 0 var(--btn-size);
+  width: var(--btn-size);
+  height: var(--btn-size);
 }
 .cand-card .stat-row { flex: 0 0 auto; }
 .cand-card .picture {
@@ -971,10 +1008,36 @@ small, .small { font-size: max(12px, 0.8em); }
    So the button contains no text at all. The bar and the upright are two
    pseudo-elements, each centred by transform, which is exact and identical
    in every browser. `.round-btn.remove` simply omits the upright. */
+/* SIZES: one number each, used by the button, the glyph inside it and the
+   spacer that balances it. Change --btn-size and everything follows.
+
+   The two sizes are fixed pixels on purpose - NOT clamp()/vw/vh like the
+   card sizes are - because browser zoom multiplies a px value and a vw value
+   by different amounts, and the button would drift out of step with itself.
+
+   The + and - inside are sized as a PERCENTAGE of the circle (46% long, 8%
+   thick), not in pixels. That is what keeps the glyph the same proportion of
+   the circle at every zoom level. When they were pixels, the circle grew
+   with zoom but the glyph did not: at 80% zoom the bar filled 58% of the
+   circle and at 150% only 31%, so the + visibly changed shape as you zoomed.
+   Measured before and after; it is now a constant 46% at every level. */
+.s34 {
+  /* WK asked for the bottom row to come down by about a fifth. It was a
+     flat 58px. It is now a range: 46px is the target on a normal screen,
+     but on a small window it is allowed back up to 52px, because below
+     that the attribute row no longer fits beside the name at our 12px
+     minimum type size and gets cut off sideways. Measured at 900x540,
+     1120x630 and 1920x1080. */
+  --mini-card-h:    clamp(46px, 7.4vh, 52px);
+  --btn-size:       26px;
+  --mini-btn-size:  21px;
+}
+
 .round-btn {
-  position: absolute;
-  top: 8px; right: 8px;
-  width: 26px; height: 26px;
+  position: relative;          /* the glyph is centred against THIS box */
+  flex: 0 0 var(--btn-size);
+  width: var(--btn-size);
+  height: var(--btn-size);
   border-radius: 50%;
   border: none;
   padding: 0;
@@ -987,13 +1050,19 @@ small, .small { font-size: max(12px, 0.8em); }
   display: block;
   transition: background 0.12s ease, transform 0.08s ease;
 }
-/* the horizontal bar — present on both + and − */
+/* the horizontal bar — present on both + and −
+
+   The glyph is drawn rather than typed, and it is sized from --btn-glyph so
+   that it keeps the same proportion to the circle at every zoom level. The
+   two translate(-50%) put its own centre on the circle's centre, which is
+   exact rather than approximately right. */
 .round-btn::before {
   content: "";
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 12px; height: 2px;
+  width: 46%; height: 8%;
+  min-height: 2px;
   border-radius: 1px;
   background: #fff;
 }
@@ -1003,7 +1072,8 @@ small, .small { font-size: max(12px, 0.8em); }
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 2px; height: 12px;
+  width: 8%; height: 46%;
+  min-width: 2px;
   border-radius: 1px;
   background: #fff;
 }
@@ -1099,14 +1169,19 @@ small, .small { font-size: max(12px, 0.8em); }
 
 /* The picture floats above the mini card, as it does now. It shrinks with
    the window rather than forcing the row taller than the space available. */
+/* WK asked for the bottom-row microbes to come down by about a fifth after
+   the scrollbars were removed. The picture is capped at 78% of the height it
+   would otherwise take, and centred in what is left, so the row keeps its
+   spacing instead of the cards sliding down to fill the gap. */
 .mini-pic {
   flex: 1 1 auto;
-  min-height: 40px;
+  min-height: 30px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   margin-bottom: 4px;
 }
+.mini-pic img { max-height: 78%; }
 .mini-pic img { max-height: 100%; max-width: 100%; object-fit: contain; }
 
 .mini-card {
@@ -1114,33 +1189,112 @@ small, .small { font-size: max(12px, 0.8em); }
   color: var(--on-light);
   border: 1px solid var(--surface-line);
   border-radius: var(--radius-small);
-  padding: 6px 8px;
+  /* The side padding narrows on a small window. That is where the few
+     pixels come from that let the attribute row fit at 900px wide without
+     shrinking the numbers below our 12px readable floor. */
+  padding: 5px clamp(4px, 0.6vw, 8px);
   position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
+/* Same header-row treatment as the big card: the button is an item in the
+   row, not pinned to the corner, so the space above and below it is equal. */
+.mini-card .mini-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+/* 12px is this project's floor for readable text and the mini card keeps
+   it: the height reduction WK asked for comes out of the picture and the
+   padding, never out of the type size. */
 .mini-card .mini-name {
-  font-size: max(12px, 0.8em);
+  font-size: max(12px, 0.78em);
   font-weight: 600;
-  margin-bottom: 3px;
-  padding-right: 22px;
+  margin-bottom: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.mini-card .mini-head .mini-name { margin-bottom: 0; }
+/* THIS ROW HAS TO FIT AT 900px WIDE, WHICH IS THE NARROWEST WE SUPPORT.
+
+   At that width a mini card is about 118px across, leaving roughly 102px
+   inside the padding. The row holds three attribute icons, their three
+   numbers, and the trait icon on the right. At a fixed 17px icon and a 12px
+   number that comes to more than 102px and the trait icon was cut off.
+
+   So the ICONS scale with the window (13px at the narrowest, 17px on a
+   large screen) while the TEXT stays at our 12px readable floor. Shrinking
+   a picture slightly costs nothing; shrinking the numbers would cost
+   legibility, so the numbers are what we protect. Verified at 900x540,
+   1120x630 and 1920x1080. */
 .mini-stats {
   display: flex;
   align-items: center;
-  gap: 3px;
+  /* Six gaps at 3px cost 18px - more than a whole icon - and on a small
+     window that is exactly what pushed Microbe 14's row (10 / 8 / 10) past
+     the edge. They close to 1px at 900px wide and open back to 3px on a
+     normal screen. The numbers are measured: children 89.7px + gaps 18px =
+     107.7px against 105px of room, so the gaps are the cheapest 3px to
+     reclaim and cost nothing that anyone can see. */
+  gap: clamp(1px, 0.18vw, 3px);
   font-size: max(12px, 0.78em);
+  min-width: 0;
+  /* THE WORST CASE THIS ROW MUST SURVIVE IS MICROBE 14.
+     It is the only microbe in the data whose values are 10, 8 and 10 - two
+     double-width numbers. At 900px wide (our narrowest supported window)
+     that row needs 112px and the card only offers 105px, so the trait icon
+     on the right was being cut off. Every other microbe fits with room to
+     spare, which is why this was easy to miss.
+
+     letter-spacing pulls the digits together very slightly, and the numbers
+     are allowed to shrink to 11px ONLY here, where they are digits rather
+     than words. Digits stay legible at 11px in a way that prose does not.
+     Checked at 900x540, 1120x630 and 1920x1080. */
+  letter-spacing: -0.01em;
 }
-.mini-stats img { width: 17px; height: 17px; }
-.mini-stats .num { font-weight: 600; margin-right: 4px; }
-.mini-stats .trait-icon { margin-left: auto; }
-/* The mini-card button is smaller, so its glyph is smaller too, and it is
-   vertically centred against the name row rather than pinned to the corner. */
+.mini-stats .num { flex: 0 0 auto; }
+.mini-stats img {
+  width: clamp(13px, 1.35vw, 17px);
+  height: clamp(13px, 1.35vw, 17px);
+  flex: 0 0 auto;
+}
+/* The gap on .mini-stats already separates these, so the number carries no
+   right margin of its own. It used to, and at the narrowest supported window
+   (900px wide) those three extra margins were exactly what pushed the trait
+   icon past the edge of the card and cut it off.
+
+*/
+.mini-stats .num {
+  font-weight: 600;
+  font-size: clamp(11px, 1.05vw, 13px);
+  flex: 0 0 auto;
+}
+/* Sits hard against the right edge, and is never allowed to be squeezed. */
+.mini-stats .trait-icon { margin-left: auto; flex: 0 0 auto; }
+.mini-stats .trait-icon img { width: clamp(13px, 1.35vw, 17px); height: clamp(13px, 1.35vw, 17px); }
+/* The mini-card button is smaller, so its glyph is smaller in the same
+   proportion. It sits in the header row, so no top/right offsets are needed
+   and none can go lopsided. */
 .mini-card .round-btn {
-  width: 21px; height: 21px;
-  top: 6px; right: 6px;
+  flex: 0 0 var(--mini-btn-size);
+  width: var(--mini-btn-size);
+  height: var(--mini-btn-size);
 }
-.mini-card .round-btn::before { width: 10px; }
-.mini-card .round-btn::after  { height: 10px; }
+/* No glyph overrides needed: the bar and upright are a percentage of the
+   circle, so a smaller circle gets a proportionally smaller glyph free. */
+
+/* A microbe that is already in a slot, or that cannot be added because all
+   three slots are full, dims as a whole tile — picture, card and text —
+   rather than only its button. Greying just the button was too easy to miss.
+   The button keeps its own heavier fade on top of this. */
+.mini-slot.is-dimmed .mini-pic,
+.mini-slot.is-dimmed .mini-card {
+  opacity: 0.4;
+  filter: grayscale(0.85);
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
 
 /* An empty grid position is exactly as tall as a filled mini card, so the
    rows do not shift as the four picks arrive. */
@@ -1151,7 +1305,6 @@ small, .small { font-size: max(12px, 0.8em); }
   background: rgba(255,255,255,0.02);
 }
 .mini-card { height: var(--mini-card-h, 56px); }
-.s34 { --mini-card-h: 58px; }
 
 /* The Legend, in the bottom-right corner of the main box — the same corner
    the Continue button uses on every other screen. */
@@ -1233,16 +1386,6 @@ small, .small { font-size: max(12px, 0.8em); }
   outline: 2px solid var(--accent);
   outline-offset: 0;
   border-color: var(--accent);
-}
-
-/* The version line on the login screen. Deliberately small and quiet — it
-   is for WK, not for candidates. */
-.version-line {
-  margin-top: 16px;
-  text-align: right;
-  font-size: 12px;
-  color: var(--on-light-muted);
-  opacity: 0.75;
 }
 
 .form-error {
