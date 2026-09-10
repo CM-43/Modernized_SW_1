@@ -282,6 +282,36 @@ function draw() {
     html += '</div>';
   });
 
+  /* The "Where you stand" block (D48): how the percentile is estimated.
+     Internal only — this page is never given to candidates. In demo mode
+     (results_mode "demo") this page must NOT be uploaded to the repository
+     at all, since it prints every expected answer. */
+  var game = MARKING.asGame(SITES);
+  if (game.benchmark) {
+    var b = game.benchmark;
+    html += '<div class="site"><h2>Where you stand: how the percentile is estimated</h2>';
+    html += '<p class="why">Results mode: <b>' + esc(game.resultsMode) + '</b>. The percentile is not a McKinsey ' +
+      'figure; it is looked up from the weighted score by the table below, which lives in ' +
+      'data/sites.json under "benchmark". Straight-line interpolation between points, rounded, kept within 1–99.</p>';
+    html += '<h3>Weights by step (each step is a fraction of its best possible, times its weight; Step 4 is the average over sites of score ÷ best possible; Step 5 counts only the microbes actually sent forward, and drops out if none were)</h3><table><tr><th>Step</th><th>Weight</th></tr>';
+    MARKING.benchmarkWeightKeys(game.sites).forEach(function (k) {
+      html += '<tr><td>' + esc(k) + '</td><td>' + esc(String(b.phase_weights[k])) + '</td></tr>';
+    });
+    html += '</table>';
+    html += '<h3>Zones (by percentile)</h3><table><tr><th>From percentile</th><th>Label</th></tr>';
+    b.zones.forEach(function (z) { html += '<tr><td>' + z.from + '</td><td>' + esc(z.label) + '</td></tr>'; });
+    html += '</table>';
+    html += '<h3>Weighted score to percentile</h3><table><tr><th>Weighted score</th><th>Percentile</th></tr>';
+    b.percentiles.forEach(function (pt) { html += '<tr><td>' + pt[0] + '</td><td>' + pt[1] + '</td></tr>'; });
+    html += '</table>';
+    html += '<h3>Worked examples</h3><table><tr><th>Weighted score</th><th>Percentile shown</th><th>Zone</th></tr>';
+    [50, 60, 70, 75, 80, 85, 90, 94, 100].forEach(function (w) {
+      var p = MARKING.percentile(w, b);
+      html += '<tr><td>' + w + '</td><td>' + p + '</td><td>' + esc(MARKING.zoneFor(p, b).label) + '</td></tr>';
+    });
+    html += '</table><div class="why">' + esc(b.note) + '</div></div>';
+  }
+
   document.getElementById("out").innerHTML = html;
 }
 </script>

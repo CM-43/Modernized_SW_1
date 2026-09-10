@@ -228,6 +228,7 @@ function runAllGroups() {
   group3KnownWrong();
   group4PoolDependence();
   group5Invariants();
+  group6Benchmark();
 }
 
 /* --------------------------------------------------------------------
@@ -728,6 +729,121 @@ function group5Invariants() {
     });
   });
   check("every microbe is named \"Microbe <number>\"", badNames.length === 0, 0, badNames);
+}
+
+/* ====================================================================
+   6. The "Where you stand" percentile (D48)
+
+   The percentile is estimated from the weighted score by the table in
+   data/sites.json. These checks pin down the arithmetic and every refusal
+   in the validation, so a mistaken edit to the table is caught here.
+   ==================================================================== */
+function group6Benchmark() {
+  group("6. Where you stand: the estimated percentile");
+
+  var B = SITES.benchmark;
+  check("the real data file carries a benchmark block", !!B, "present", B);
+  if (!B) return;
+
+  /* the arithmetic of the lookup */
+  check("weighted score 0 gives the 1st percentile", MARKING.percentile(0, B) === 1, 1, MARKING.percentile(0, B));
+  check("weighted score 100 gives the 99th percentile", MARKING.percentile(100, B) === 99, 99, MARKING.percentile(100, B));
+  check("a point in the table is returned exactly (68 → 50)", MARKING.percentile(68, B) === 50, 50, MARKING.percentile(68, B));
+  check("between two points is a straight line (70 → 53)", MARKING.percentile(70, B) === 53, 53, MARKING.percentile(70, B));
+  check("between two points is a straight line (80 → 69)", MARKING.percentile(80, B) === 69, 69, MARKING.percentile(80, B));
+  check("a score below 0 is treated as 0", MARKING.percentile(-5, B) === 1, 1, MARKING.percentile(-5, B));
+  check("a score above 100 is treated as 100", MARKING.percentile(140, B) === 99, 99, MARKING.percentile(140, B));
+
+  /* the weighted score (D58: one weight per step, 5 / 25 / 20 / 40 / 10) */
+  var W = { step1: 5, step2: 25, step3: 20, step4: 40, step5: 10 };
+  check("the real weights are 5 / 25 / 20 / 40 / 10 by step", JSON.stringify(B.phase_weights) === JSON.stringify(W), W, B.phase_weights);
+  var w = MARKING.weightedScore({ step1: 1, step2: 1, step3: 1, step4: 1, step5: 1 }, W);
+  check("full marks everywhere is a weighted score of 100", w === 100, 100, w);
+  var w2 = MARKING.weightedScore({ step1: 1, step2: 1, step3: 1, step4: (0.75 + 0.8 + 0.75) / 3, step5: 1 }, W);
+  check("all decisions right, Step 4 at 60/80, 80/100, 60/80, is 90.7", w2 === 90.7, 90.7, w2);
+  var w3 = MARKING.weightedScore({ step1: 1, step2: 0.5, step3: 1, step4: 1, step5: 1 }, W);
+  check("half of Step 2 wrong and everything else right is 87.5", w3 === 87.5, 87.5, w3);
+  var w4 = MARKING.weightedScore({ step1: 1, step2: 1, step3: 1, step4: 1, step5: null }, W);
+  check("a step never asked (Step 5 with nothing sent forward) drops out and the rest still reach 100", w4 === 100, 100, w4);
+  var w5 = MARKING.weightedScore({ step1: 1, step2: 0.5, step3: 1, step4: 1, step5: null }, W);
+  check("… and its weight is shared out: half of Step 2 wrong with no Step 5 is 86.1", w5 === 86.1, 86.1, w5);
+
+  /* zones, at the boundaries */
+  check("percentile 69 is in the first zone", MARKING.zoneFor(69, B).label === B.zones[0].label, B.zones[0].label, MARKING.zoneFor(69, B).label);
+  check("percentile 70 is in the second zone", MARKING.zoneFor(70, B).label === B.zones[1].label, B.zones[1].label, MARKING.zoneFor(70, B).label);
+  check("percentile 89 is in the third zone", MARKING.zoneFor(89, B).label === B.zones[2].label, B.zones[2].label, MARKING.zoneFor(89, B).label);
+  check("percentile 90 is in the last zone", MARKING.zoneFor(90, B).label === B.zones[3].label, B.zones[3].label, MARKING.zoneFor(90, B).label);
+
+  /* the whole thing, on the answer key: every answer right */
+  var result = MARKING.markGame(SITES, FILES, answersFromKey());
+  check("the answer key's weighted score is 100", result.benchmark && result.benchmark.weighted === 100, 100, result.benchmark && result.benchmark.weighted);
+  check("the answer key sits at the 99th percentile, decile 10, top 1%",
+    result.benchmark && result.benchmark.percentile === 99 && result.benchmark.decile === 10 && result.benchmark.topShare === 1,
+    "99 / 10 / 1", result.benchmark && [result.benchmark.percentile, result.benchmark.decile, result.benchmark.topShare]);
+  check("the answer key lands in the last zone", result.benchmark && result.benchmark.zone.label === B.zones[B.zones.length - 1].label,
+    B.zones[B.zones.length - 1].label, result.benchmark && result.benchmark.zone.label);
+  check("80% at a site whose best possible is 80% counts as full marks, so the key's Step 4 fraction is 1",
+    result.benchmark && result.benchmark.fractions.step4 === 1, 1, result.benchmark && result.benchmark.fractions.step4);
+  check("the key's Step 5 fraction is 1 over the 5 microbes sent forward",
+    result.benchmark && result.benchmark.fractions.step5 === 1, 1, result.benchmark && result.benchmark.fractions.step5);
+
+  /* a wrong Step 3 pick caps Step 4 and is counted there too — the accepted
+     snowball (D59): Site 2 pick Microbe 25 instead of 8, then the best trio
+     reachable from that pool (80 of a possible 100) */
+  var snow = answersFromKey();
+  snow.sites["2"].step3[0].microbe = "Microbe 25";
+  snow.sites["2"].step4.microbes = ["Microbe 20", "Microbe 46", "Microbe 15"];
+  var rs = MARKING.markGame(SITES, FILES, snow);
+  check("snowball case: Site 2 Step 4 scores 80 with best-for-pool 80 and best overall 100",
+    rs.sites["2"].step4.score === 80 && rs.sites["2"].step4.bestForYourPool === 80 && rs.sites["2"].step4.bestOverall === 100,
+    "80 / 80 / 100", [rs.sites["2"].step4.score, rs.sites["2"].step4.bestForYourPool, rs.sites["2"].step4.bestOverall]);
+  check("… Step 4's fraction is measured against the best overall, so it is (1 + 0.8 + 1) / 3",
+    rs.benchmark && Math.abs(rs.benchmark.fractions.step4 - (2.8 / 3)) < 1e-9, 2.8 / 3, rs.benchmark && rs.benchmark.fractions.step4);
+  check("… and the weighted score is 95.7 (Step 3 at 11/12 and Step 4 at 93.3%)",
+    rs.benchmark && rs.benchmark.weighted === 95.7, 95.7, rs.benchmark && rs.benchmark.weighted);
+
+  /* an empty run: nothing answered */
+  var empty = MARKING.markGame(SITES, FILES, { sites: {} });
+  check("an unanswered run has a weighted score of 0 and sits at the 1st percentile",
+    empty.benchmark && empty.benchmark.weighted === 0 && empty.benchmark.percentile === 1,
+    "0 and 1", empty.benchmark && [empty.benchmark.weighted, empty.benchmark.percentile]);
+
+  /* no block, no percentile */
+  var noBlock = JSON.parse(JSON.stringify(SITES)); delete noBlock.benchmark;
+  var r0 = MARKING.markGame(noBlock, FILES, answersFromKey());
+  check("without a benchmark block the result carries no percentile", r0.benchmark === null, null, r0.benchmark);
+  check("… and the data still validates", MARKING.validateData(noBlock, FILES).ok, true, MARKING.validateData(noBlock, FILES).errors);
+
+  /* every refusal, in plain English */
+  function broken(edit) {
+    var copy = JSON.parse(JSON.stringify(SITES));
+    edit(copy);
+    var v = MARKING.validateData(copy, FILES);
+    return { ok: v.ok, texts: v.errors.map(function (e) { return e.text; }).join(" | ") };
+  }
+  var r;
+  r = broken(function (c) { c.benchmark.phase_weights.step4 = 45; });
+  check("weights not adding up to 100 are refused", !r.ok && /add up to 100/.test(r.texts), "…must add up to 100…", r.texts);
+  r = broken(function (c) { delete c.benchmark.phase_weights.step5; });
+  check("a missing weight is refused", !r.ok && /step5/.test(r.texts), "…phase_weights.step5…", r.texts);
+  r = broken(function (c) { c.benchmark.phase_weights.decisions = 0; });
+  check("an unexpected weight name is refused", !r.ok && /unexpected entry/.test(r.texts), "…unexpected entry…", r.texts);
+  r = broken(function (c) { c.benchmark.percentiles[3] = [30, 12]; });
+  check("percentile points with scores out of order are refused", !r.ok && /scores must increase/.test(r.texts), "…scores must increase…", r.texts);
+  r = broken(function (c) { c.benchmark.percentiles[5][1] = 3; });
+  check("a percentile that goes down is refused", !r.ok && /never decrease/.test(r.texts), "…must never decrease…", r.texts);
+  r = broken(function (c) { c.benchmark.percentiles[0][1] = 0; });
+  check("a percentile outside 1–99 is refused", !r.ok && /not between 1 and 99/.test(r.texts), "…not between 1 and 99…", r.texts);
+  r = broken(function (c) { c.benchmark.percentiles[c.benchmark.percentiles.length - 1][1] = 100; });
+  check("a percentile of 100 is refused", !r.ok && /not between 1 and 99/.test(r.texts), "…not between 1 and 99…", r.texts);
+  r = broken(function (c) { c.benchmark.zones[0].from = 5; });
+  check("zones that do not start at 0 are refused", !r.ok && /first zone must start from 0/.test(r.texts), "…first zone must start from 0…", r.texts);
+  r = broken(function (c) { c.benchmark.zones[2].from = 60; });
+  check("zones out of order are refused", !r.ok && /not after the zone before it/.test(r.texts), "…not after the zone before it…", r.texts);
+  r = broken(function (c) { c.results_mode = "trial"; });
+  check("a results_mode other than full or demo is refused", !r.ok && /results_mode/.test(r.texts), "…results_mode must be…", r.texts);
+  r = broken(function (c) { c.results_mode = "demo"; });
+  check("results_mode \"demo\" is accepted", r.ok, true, r.texts);
 }
 
 /* ====================================================================

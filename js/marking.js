@@ -149,14 +149,23 @@ var MARKING = (function () {
      game-wide settings (`timeLimitMinutes`, `sliderSpan`) sit at the top
      level of that file. */
   function asGame(sitesJson) {
-    if (!sitesJson) return { timeLimitMinutes: null, sliderSpan: null, sites: [] };
+    if (!sitesJson) return { timeLimitMinutes: null, sliderSpan: null, sites: [], resultsMode: "full", labels: {}, benchmark: null };
     if (Array.isArray(sitesJson)) {
-      return { timeLimitMinutes: null, sliderSpan: null, sites: sitesJson };
+      return { timeLimitMinutes: null, sliderSpan: null, sites: sitesJson, resultsMode: "full", labels: {}, benchmark: null };
     }
     return {
       timeLimitMinutes: sitesJson.timeLimitMinutes,
       sliderSpan: sitesJson.sliderSpan,
-      sites: Array.isArray(sitesJson.sites) ? sitesJson.sites : []
+      sites: Array.isArray(sitesJson.sites) ? sitesJson.sites : [],
+      /* "full" (every answer explained) or "demo" (score and percentile
+         only, explanations locked). Absent means "full". Same key as the
+         Redrock simulation, so WK edits one shape. */
+      resultsMode: sitesJson.results_mode === undefined ? "full" : sitesJson.results_mode,
+      /* Customer-facing wording that lives in content, not code. */
+      labels: sitesJson.labels && typeof sitesJson.labels === "object" ? sitesJson.labels : {},
+      /* The "Where you stand" block: how the percentile is estimated.
+         Optional — absent means no percentile is shown. */
+      benchmark: sitesJson.benchmark === undefined ? null : sitesJson.benchmark
     };
   }
 
@@ -280,10 +289,20 @@ var MARKING = (function () {
       fail(SITES_FILE, null, "sliderSpan must be a whole number between 1 and 10");
     }
 
+    /* ---- the results mode ---- */
+    if (game.resultsMode !== "full" && game.resultsMode !== "demo") {
+      fail(SITES_FILE, null, "results_mode must be \"full\" or \"demo\" (or left out, which means \"full\")");
+    }
+
     /* ---- the list of sites ---- */
     if (sites.length < 1) {
       fail(SITES_FILE, null, "there must be at least one site");
       return { ok: false, errors: errors, warnings: warnings };
+    }
+
+    /* ---- the percentile block ("benchmark"), if there is one ---- */
+    if (game.benchmark !== null) {
+      validateBenchmark(game.benchmark, sites, fail, SITES_FILE);
     }
 
     for (var i = 0; i < sites.length; i++) {
@@ -478,6 +497,98 @@ var MARKING = (function () {
     }
 
     return { ok: errors.length === 0, errors: errors, warnings: warnings };
+  }
+
+  /* The percentile block is optional, but if it is there it must be sane,
+     because a broken table would quietly tell every candidate the wrong
+     thing. Every message says what is wrong in plain English. */
+  function validateBenchmark(b, sites, fail, file) {
+    var where = file + " (benchmark)";
+    if (!b || typeof b !== "object") {
+      fail(where, null, "benchmark must be an object with note, phase_weights, zones and percentiles");
+      return;
+    }
+
+    /* weights: one per step ("step1" … "step5"); whole or decimal numbers,
+       none negative, adding up to exactly 100 */
+    var weights = b.phase_weights;
+    if (!weights || typeof weights !== "object") {
+      fail(where, null, "phase_weights is missing");
+    } else {
+      var expectedKeys = benchmarkWeightKeys(sites);
+      var total = 0;
+      for (var k = 0; k < expectedKeys.length; k++) {
+        var w = weights[expectedKeys[k]];
+        if (typeof w !== "number" || !isFinite(w) || w < 0) {
+          fail(where, null, "phase_weights." + expectedKeys[k] + " must be a number of 0 or more");
+        } else {
+          total += w;
+        }
+      }
+      for (var key in weights) {
+        if (Object.prototype.hasOwnProperty.call(weights, key) && expectedKeys.indexOf(key) === -1) {
+          fail(where, null, "phase_weights has an unexpected entry \"" + key + "\" (expected: " + expectedKeys.join(", ") + ")");
+        }
+      }
+      if (Math.abs(total - 100) > 0.0001) {
+        fail(where, null, "phase_weights must add up to 100, but add up to " + total);
+      }
+    }
+
+    /* zones: a list starting at 0, each with a whole-number "from" between
+       0 and 99 in increasing order, and a label */
+    if (!Array.isArray(b.zones) || b.zones.length < 1) {
+      fail(where, null, "zones must be a list with at least one entry");
+    } else {
+      if (b.zones[0].from !== 0) fail(where, null, "the first zone must start from 0");
+      for (var z = 0; z < b.zones.length; z++) {
+        var zone = b.zones[z];
+        if (!isWholeNumber(zone.from) || zone.from < 0 || zone.from > 99) {
+          fail(where, null, "zone " + (z + 1) + " needs a whole-number \"from\" between 0 and 99");
+        } else if (z > 0 && zone.from <= b.zones[z - 1].from) {
+          fail(where, null, "zone " + (z + 1) + " starts at " + zone.from + ", which is not after the zone before it");
+        }
+        if (typeof zone.label !== "string" || !zone.label) {
+          fail(where, null, "zone " + (z + 1) + " needs a label");
+        }
+      }
+    }
+
+    /* percentiles: a list of [weighted score, percentile] points; scores
+       from 0 to 100 and strictly increasing, percentiles 1 to 99 and never
+       decreasing; the first point must be at score 0 and the last at 100 */
+    var pts = b.percentiles;
+    if (!Array.isArray(pts) || pts.length < 2) {
+      fail(where, null, "percentiles must be a list of at least two [score, percentile] points");
+    } else {
+      for (var i = 0; i < pts.length; i++) {
+        var pt = pts[i];
+        if (!Array.isArray(pt) || pt.length !== 2 || typeof pt[0] !== "number" || typeof pt[1] !== "number") {
+          fail(where, null, "percentiles point " + (i + 1) + " must be [score, percentile]");
+          continue;
+        }
+        if (pt[0] < 0 || pt[0] > 100) fail(where, null, "percentiles point " + (i + 1) + ": the score " + pt[0] + " is not between 0 and 100");
+        if (pt[1] < 1 || pt[1] > 99) fail(where, null, "percentiles point " + (i + 1) + ": the percentile " + pt[1] + " is not between 1 and 99");
+        if (i > 0 && Array.isArray(pts[i - 1]) && pts[i - 1].length === 2) {
+          if (pt[0] <= pts[i - 1][0]) fail(where, null, "percentiles point " + (i + 1) + ": scores must increase, but " + pt[0] + " follows " + pts[i - 1][0]);
+          if (pt[1] < pts[i - 1][1]) fail(where, null, "percentiles point " + (i + 1) + ": percentiles must never decrease, but " + pt[1] + " follows " + pts[i - 1][1]);
+        }
+      }
+      var first = pts[0], last = pts[pts.length - 1];
+      if (Array.isArray(first) && first[0] !== 0) fail(where, null, "the first percentiles point must be at score 0");
+      if (Array.isArray(last) && last[0] !== 100) fail(where, null, "the last percentiles point must be at score 100");
+    }
+
+    if (typeof b.note !== "string") {
+      fail(where, null, "note must be a sentence explaining that the percentile is an estimate");
+    }
+  }
+
+  /* The weight names the benchmark block must contain: one per step of the
+     game, applied across all sites (D58). */
+  var STEP_WEIGHT_KEYS = ["step1", "step2", "step3", "step4", "step5"];
+  function benchmarkWeightKeys(sites) {
+    return STEP_WEIGHT_KEYS.slice();
   }
 
   function isWholeNumber(v) {
@@ -940,7 +1051,141 @@ var MARKING = (function () {
       finished: finished
     };
 
+    /* ---------------- Where you stand ----------------
+       Only if the content file carries a benchmark block. The raw tiles
+       above are untouched; only this block reads the weighted score. */
+    result.benchmark = game.benchmark ? standing(result, sites, game.benchmark) : null;
+
     return result;
+  }
+
+  /* ==================================================================
+     SECTION 2b — WHERE YOU STAND (the estimated percentile)
+
+     There is no database of candidates. The percentile is ESTIMATED from
+     the candidate's score by a table that WK keeps in `data/sites.json`
+     under "benchmark", and the results screen says so. Adopted from the
+     Redrock simulation so that a candidate sees one system across products
+     (SW-Master-Doc D48).
+
+     Two steps:
+       1. weightedScore — one number out of 100. Each part of the result is
+          turned into a fraction (how much of the best possible the
+          candidate got), multiplied by its weight from content, and the
+          weighted fractions are added up. The parts for Sea Wolf are each
+          site's Step 4 score (divided by the best score possible at that
+          site, so 80% at a site where 80% is the ceiling counts as full
+          marks) and the decisions (Steps 1, 2, 3 and 5, correct ÷ asked).
+       2. percentile — the weighted score is looked up in the table of
+          [score, percentile] points, with straight-line interpolation
+          between points, rounded to a whole number and kept within 1–99.
+     ================================================================== */
+
+  /* The fraction of the best possible that each STEP of the game achieved,
+     across all sites (D58). Everything here is 0..1, or null for a step the
+     candidate was never asked (Step 5 when nothing was sent forward).
+
+       step1, step2, step3, step5   correct ÷ asked, summed over the sites
+       step4                        the average over sites of score ÷ the best
+                                    score possible at that site (bestOverall)
+
+     Two deliberate choices, both WK's (D58, D59):
+     * Step 5 counts only the microbes the candidate actually sent forward.
+       A microbe wrongly returned at Step 2 is penalised there and not again.
+     * Step 4 is measured against the best possible at the site, NOT against
+       the best reachable from the candidate's own pool. So a wrong Step 3
+       pick can cost twice — once at Step 3 and again by capping Step 4. That
+       is accepted as the one place mistakes snowball, as in the real game. */
+  function benchmarkFractions(result, sites) {
+    var tally = { step1: [0, 0], step2: [0, 0], step3: [0, 0], step5: [0, 0] };
+    var step4 = [];
+    for (var i = 0; i < sites.length; i++) {
+      var r = result.sites[String(sites[i].id)];
+      tally.step1[0] += r.step1.correct; tally.step1[1] += r.step1.of;
+      tally.step2[0] += r.step2.correct; tally.step2[1] += r.step2.of;
+      tally.step3[0] += r.step3.correct; tally.step3[1] += r.step3.of;
+      if (r.step5.applicable) { tally.step5[0] += r.step5.correct; tally.step5[1] += r.step5.of; }
+      var ceiling = (typeof r.step4.bestOverall === "number" && r.step4.bestOverall > 0) ? r.step4.bestOverall : 100;
+      step4.push(Math.min(1, Math.max(0, r.step4.score / ceiling)));
+    }
+    var fractions = {};
+    for (var key in tally) {
+      if (!Object.prototype.hasOwnProperty.call(tally, key)) continue;
+      fractions[key] = tally[key][1] > 0 ? tally[key][0] / tally[key][1] : null;
+    }
+    var sum = 0;
+    for (var j = 0; j < step4.length; j++) sum += step4[j];
+    fractions.step4 = step4.length ? sum / step4.length : null;
+    return fractions;
+  }
+
+  /* The weighted score out of 100, to one decimal place. A step with a null
+     fraction (never asked) drops out and the other weights are scaled up so
+     they still add to 100 — a candidate is judged on what they were asked. */
+  function weightedScore(fractions, phaseWeights) {
+    var total = 0, weightUsed = 0;
+    for (var key in phaseWeights) {
+      if (!Object.prototype.hasOwnProperty.call(phaseWeights, key)) continue;
+      var fraction = fractions[key];
+      if (fraction === null || fraction === undefined) continue;
+      if (typeof fraction !== "number") fraction = 0;
+      total += fraction * phaseWeights[key];
+      weightUsed += phaseWeights[key];
+    }
+    if (weightUsed <= 0) return 0;
+    return Math.round((total / weightUsed) * 100 * 10) / 10;
+  }
+
+  /* Straight-line interpolation over the [score, percentile] points.
+     Rounded to a whole number and clamped to 1..99, so a candidate is never
+     told they beat nobody or everybody. */
+  function percentile(weighted, benchmark) {
+    var pts = benchmark.percentiles;
+    var x = Math.min(100, Math.max(0, weighted));
+    var p;
+    if (x <= pts[0][0]) {
+      p = pts[0][1];
+    } else if (x >= pts[pts.length - 1][0]) {
+      p = pts[pts.length - 1][1];
+    } else {
+      for (var i = 1; i < pts.length; i++) {
+        if (x <= pts[i][0]) {
+          var x0 = pts[i - 1][0], y0 = pts[i - 1][1], x1 = pts[i][0], y1 = pts[i][1];
+          p = y0 + (x - x0) * (y1 - y0) / (x1 - x0);
+          break;
+        }
+      }
+    }
+    return Math.min(99, Math.max(1, Math.round(p)));
+  }
+
+  /* Which zone a percentile falls in: the last zone whose "from" is at or
+     below it. Zones are in percentile terms (70th, 80th, 90th). */
+  function zoneFor(p, benchmark) {
+    var zones = benchmark.zones;
+    var found = zones[0];
+    for (var i = 0; i < zones.length; i++) {
+      if (p >= zones[i].from) found = zones[i];
+    }
+    return found;
+  }
+
+  /* Everything the results screen needs to draw the block. */
+  function standing(result, sites, benchmark) {
+    var fractions = benchmarkFractions(result, sites);
+    var weighted = weightedScore(fractions, benchmark.phase_weights);
+    var p = percentile(weighted, benchmark);
+    var decile = Math.min(10, Math.ceil(p / 10));
+    return {
+      fractions: fractions,
+      weighted: weighted,
+      percentile: p,
+      decile: decile,
+      topShare: 100 - p,
+      zone: zoneFor(p, benchmark),
+      note: benchmark.note,
+      zones: benchmark.zones
+    };
   }
 
   /* ---- Step 1 ----
@@ -1306,6 +1551,10 @@ var MARKING = (function () {
     expectedStep5: expectedStep5,
     markGame: markGame,
     answerKey: answerKey,
+    weightedScore: weightedScore,
+    percentile: percentile,
+    zoneFor: zoneFor,
+    benchmarkWeightKeys: benchmarkWeightKeys,
 
     /* small read-only helpers the screens are allowed to use, so that
        app.js never has to work anything out for itself */

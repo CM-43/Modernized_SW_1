@@ -68,8 +68,8 @@
 
   /* The smallest window the game is usable in. Below this the candidate
      gets a message instead, and gets the game back when they enlarge it. */
-  var MIN_WIDTH = 900;
-  var MIN_HEIGHT = 540;
+  var MIN_WIDTH = 1000;
+  var MIN_HEIGHT = 562;
 
   var app = document.getElementById("app");
   var tooSmall = document.getElementById("too-small");
@@ -131,25 +131,33 @@
          site starts, since the cards are gone by then anyway. */
       openCards: {},
       confirmRestart: false,
-      /* "Expand" — the simulation filling the lesson's frame edge to edge.
-         Deliberately not the browser's own fullscreen; see the "fullscreen"
-         case in the click handler for why. Not reset by Restart: if the
-         candidate expanded the view, they want it to stay expanded. */
-      expanded: false,
       loginError: "",
-      revealReasons: {}   /* per site, on the results screen                */
+      revealReasons: {},  /* per site, on the results screen                */
+      /* Which site blocks on the results screen are open. Kept here for the
+         same reason as openCards: the screen is redrawn from scratch when
+         "Show reasons" is pressed, so anything the page alone remembered
+         (which <details> were open) snapped back to Site 1 only. */
+      openSites: {}
     },
 
     result: null          /* the marked game, once the results are shown    */
   };
 
-  /* Adds or removes one class on the page's root element. Everything the
-     expanded view does is CSS on that class; there is no measuring, no
-     resizing and no browser API involved, so nothing can pop up. */
-  function applyExpanded() {
+  /* Can this page go fullscreen at all? False inside a lesson iframe that
+     lacks `allowfullscreen`, and on browsers without the feature (iPad
+     Safari). When false the button is simply not drawn (SW-BUILD-SPEC
+     §6.5, D46) — a button that cannot do what it says is worse than none. */
+  function fullscreenAvailable() {
     try {
-      document.documentElement.classList.toggle("is-expanded", !!state.ui.expanded);
-    } catch (e) { /* never let a display nicety stop the game */ }
+      return !!(document.fullscreenEnabled && document.documentElement.requestFullscreen);
+    } catch (e) { return false; }
+  }
+
+  /* Customer-facing wording that lives in data/sites.json under "labels",
+     with a fallback so a missing label never breaks a screen. */
+  function label(key, fallback) {
+    var labels = state.data && state.data.labels;
+    return labels && typeof labels[key] === "string" ? labels[key] : fallback;
   }
 
   function sites() { return state.data ? state.data.sites : []; }
@@ -294,9 +302,11 @@
   function resumeClock() { if (state.timer.everStarted) state.timer.running = true; }
 
   function timerText() {
-    if (!state.timer.everStarted || !state.timer.running) return "Time paused";
-    if (state.timer.secondsLeft <= 0) return "Time's up";
+    if (state.timer.everStarted && state.timer.secondsLeft <= 0) return "Time's up";
     return Math.round(state.timer.secondsLeft / 60) + " min left";
+  }
+  function timerPaused() {
+    return !state.timer.running;
   }
 
   /* Only the timer is redrawn each second, not the whole screen — redrawing
@@ -307,6 +317,8 @@
     if (!textEl || !fillEl) return;
     textEl.textContent = timerText();
     textEl.className = "timer-text" + (state.timer.secondsLeft <= 0 && state.timer.everStarted ? " is-up" : "");
+    var pausedEl = document.getElementById("timer-paused");
+    if (pausedEl) pausedEl.classList.toggle("is-visible", timerPaused());
     var left = Math.max(0, state.timer.secondsLeft);
     fillEl.style.width = (state.timer.total ? (left / state.timer.total) * 100 : 100) + "%";
   }
@@ -351,23 +363,30 @@
      ====================================================================== */
 
   function headerHTML() {
-    /* The button shows a cross when we are already filling the screen (or
-       the frame), and the expand arrows otherwise, so it always says what
-       pressing it will do. The browser's own Escape key is handled too —
-       see the fullscreenchange listener near the bottom of this file. */
-    var isBig = !!(typeof document !== "undefined" && document.fullscreenElement) ||
-                state.ui.expanded;
-    var fullscreenButton =
-      '<button class="btn-fullscreen" data-action="fullscreen" title="' +
-      (isBig ? "Exit full screen" : "Full screen") + '">' +
-      (isBig ? "\u2715" : "\u26F6") + '</button>';
+    /* The button shows a cross when we are already fullscreen and the
+       expand arrows otherwise, so it always says what pressing it will do.
+       The browser's own Escape key is handled too — see the
+       fullscreenchange listener near the bottom of this file. It is not
+       drawn at all where fullscreen is impossible. */
+    var isBig = !!(typeof document !== "undefined" && document.fullscreenElement);
+    var fullscreenButton = fullscreenAvailable()
+      ? '<button class="btn-fullscreen" data-action="fullscreen" title="' +
+        (isBig ? "Exit full screen" : "Full screen") + '">' +
+        (isBig ? "\u2715" : "\u26F6") + '</button>'
+      : "";
+    /* The clock keeps showing the time while paused; "Timer paused" is
+       printed beneath it, as the real game does (D49). The label is always
+       in the page and only made visible, so the header never changes height. */
     return '' +
       '<div class="header-bar">' +
         '<div class="header-left">' +
           '<button class="btn-restart" data-action="restart">Restart</button>' +
         '</div>' +
         '<div class="header-centre">' +
-          '<span class="timer-text" id="timer-text">' + esc(timerText()) + '</span>' +
+          '<span class="timer-stack">' +
+            '<span class="timer-text" id="timer-text">' + esc(timerText()) + '</span>' +
+            '<span class="timer-paused" id="timer-paused">' + esc(label("timer_paused", "Timer paused")) + '</span>' +
+          '</span>' +
           '<div class="time-bar"><div class="time-bar-fill" id="time-bar-fill"></div></div>' +
         '</div>' +
         '<div class="header-right">' + fullscreenButton + '</div>' +
@@ -977,10 +996,6 @@
       var dimmed = ui.phase === 4 &&
         (inSlot || ui.slots.every(function (s) { return s !== null; }));
 
-      /* The name and numbers go in one column, the round button in a column
-         of its own beside them. Keeping the button out of the name row is
-         what stops it colliding with the trait icon at the right-hand end
-         of the numbers row — see the .mini-card notes in app.css. */
       /* The card follows the original application's layout: the name alone
          on the top row with the + button in the corner beside it, and the
          three attribute numbers followed by the trait icon on the row
@@ -1036,12 +1051,10 @@
       '</div>';
   }
 
-  /* The three attribute numbers. The trait icon is NOT included here: on the
-     bottom-row cards it sits up on the name line instead, because the
-     numbers line is the tight one — three two-digit values plus four icons
-     do not fit in a 118px card at our smallest supported window. The name
-     line has room to spare, so the trait icon lives there. */
-  /* Each icon is wrapped WITH its own number in a .stat-pair.
+  /* The three attribute numbers. The trait icon is added separately by
+     miniTraitHTML, straight after the third number (D40).
+
+     Each icon is wrapped WITH its own number in a .stat-pair.
 
      Without the wrapper the row held seven loose items, and the spreading
      put the same gap between an icon and its own number as between that
@@ -1075,9 +1088,12 @@
      8. THE RESULTS SCREEN
      ====================================================================== */
 
+  function isDemo() { return state.data && state.data.results_mode === "demo"; }
+
   function resultsHTML() {
     var result = state.result;
     var theSites = sites();
+    var demo = isDemo();
 
     var tiles = theSites.map(function (s, index) {
       var r = result.sites[String(s.id)].step4;
@@ -1097,20 +1113,144 @@
       (summary.finished ? "" : '<span class="sep">|</span>Not all sites were completed') +
       '</div>';
 
-    var blocks = theSites.map(function (s, index) {
-      return siteBlockHTML(s, result.sites[String(s.id)], index === 0);
+    /* In demo mode every detail block is drawn greyed out and locked:
+       heading and score visible, nothing inside, nothing to expand. The
+       CSV and Print buttons go too, because the CSV lists the expected
+       answers (D48). */
+    var blocks = theSites.map(function (s) {
+      return demo
+        ? lockedSiteBlockHTML(s, result.sites[String(s.id)])
+        : siteBlockHTML(s, result.sites[String(s.id)], !!state.ui.openSites[String(s.id)]);
     }).join("");
+
+    var demoNote = demo
+      ? '<div class="demo-note"><span class="lock" aria-hidden="true">' + LOCK_ICON + '</span>' +
+        '<span>' + esc(label("demo_note", "This is the free demo, which shows your score and percentile only.")) + '</span></div>'
+      : "";
 
     return '<div class="results"><div class="results-inner">' +
       '<div class="results-top"><h1>Your result</h1>' +
       '<div class="results-actions">' +
-        '<button class="btn btn-quiet" data-action="print">Print</button>' +
-        '<button class="btn btn-quiet" data-action="csv">Download CSV</button>' +
+        (demo ? "" : '<button class="btn btn-quiet" data-action="print">Print</button>' +
+                     '<button class="btn btn-quiet" data-action="csv">Download CSV</button>') +
         '<button class="btn" data-action="restart">Restart</button>' +
       '</div></div>' +
+      standingHTML(result.benchmark) +
       '<div class="tiles">' + tiles + '</div>' +
-      summaryLine + blocks +
+      summaryLine + demoNote + blocks +
       '</div></div>';
+  }
+
+  /* A small padlock, drawn inline so nothing is loaded from anywhere. */
+  var LOCK_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>';
+
+  /* "th", "st", "nd", "rd" — the ordinal suffix alone, drawn smaller than
+     the number, as Redrock draws it. */
+  function ordinal(n) {
+    var tens = n % 100, ones = n % 10;
+    if (tens >= 11 && tens <= 13) return "th";
+    return ones === 1 ? "st" : ones === 2 ? "nd" : ones === 3 ? "rd" : "th";
+  }
+
+  /* Which colour family a zone is drawn in, decided by its POSITION in the
+     content's list, never by its label. The first zone (below the pass
+     region) is neutral grey; counting down from the top, the highest zone
+     is green, the one under it light green, and any others amber. With four
+     zones that gives grey / amber / light green / green. Never red: a
+     candidate below the line should be motivated, not punished. Copied from
+     Redrock (zoneTone) so the two products draw the same card (D54). */
+  function zoneTone(index, count) {
+    if (index === 0) return "grey";
+    var fromTop = count - 1 - index;
+    return fromTop === 0 ? "green" : fromTop === 1 ? "lightgreen" : "amber";
+  }
+
+  /* THE "WHERE YOU STAND" CARD (D48, D54). Drawn above the score tiles from
+     the numbers the marking engine worked out — nothing is computed here.
+     The markup is Redrock's standingHtml() with Sea Wolf's names, so the
+     two products look the same: big number with a smaller ordinal and the
+     word "percentile"; a filled pill; one sentence; a thin decile band with
+     the numbers 1–10 beneath it, a blue marker at exactly the percentile;
+     a legend reading "70–79 · Borderline"; the content note under a rule.
+     No caption (R-D47): "Where you stand" is the accessibility label only. */
+  function standingHTML(b) {
+    if (!b) return "";
+    var zones = b.zones;
+    var p = b.percentile;
+    var zoneIndex = zones.indexOf(b.zone);
+    var tone = zoneIndex >= 0 ? zoneTone(zoneIndex, zones.length) : "grey";
+
+    /* the ten cells, each coloured by the zone its decile starts in */
+    var cells = "", nums = "";
+    for (var d = 1; d <= 10; d++) {
+      var z = MARKING.zoneFor((d - 1) * 10, b);
+      cells += '<span class="band-cell tone-' + zoneTone(zones.indexOf(z), zones.length) + '"></span>';
+      nums += '<span>' + d + '</span>';
+    }
+
+    /* The marker sits at exactly the percentile along the band. The band is
+       ten equal cells with a 4px gap between them, so the position is the
+       share of the cells' total width plus the gaps already passed. */
+    var cellIndex = Math.min(9, Math.floor(p / 10));
+    var left = 'calc((100% - 36px) * ' + (p / 100) + ' + ' + (cellIndex * 4) + 'px)';
+
+    var legend = "";
+    for (var i = 0; i < zones.length; i++) {
+      var range = i === 0 ? ""
+        : (i === zones.length - 1 ? zones[i].from + "+"
+                                  : zones[i].from + "–" + (zones[i + 1].from - 1)) + " · ";
+      legend += '<span class="legend-item"><i class="tone-' + zoneTone(i, zones.length) + '"></i>' +
+        esc(range) + esc(zones[i].label) + '</span>';
+    }
+
+    return '<section class="standing tone-' + tone + '" aria-label="Where you stand">' +
+      '<div class="standing-main">' +
+        '<div class="standing-left">' +
+          '<div class="standing-figure">' +
+            '<span class="standing-number">' + p + '</span>' +
+            '<span class="standing-ordinal">' + ordinal(p) + '</span>' +
+            '<span class="standing-word">percentile</span>' +
+          '</div>' +
+          '<div class="standing-pill">Decile ' + b.decile + ' · top ' + b.topShare + '%' +
+            ' · ' + esc(b.zone.label) + '</div>' +
+          '<p class="standing-sentence">Estimated: your weighted score of <b>' +
+            showScore(b.weighted) + ' / 100</b> beats about <b>' + p + ' in 100</b> candidates ' +
+            'who practised this simulation.</p>' +
+        '</div>' +
+        '<div class="standing-right">' +
+          '<div class="band" role="img" aria-label="Decile band, you are at the ' + p + ordinal(p) + ' percentile">' +
+            '<div class="band-marker" style="left:' + left + '">' +
+              '<span class="marker-label">You · ' + p + ordinal(p) + '</span>' +
+              '<span class="marker-arrow"></span>' +
+              '<span class="marker-line"></span>' +
+            '</div>' +
+            '<div class="band-cells">' + cells + '</div>' +
+            '<div class="band-nums">' + nums + '</div>' +
+          '</div>' +
+          '<div class="band-legend">' + legend + '</div>' +
+        '</div>' +
+      '</div>' +
+      (b.note ? '<p class="standing-note">' + esc(b.note) + '</p>' : "") +
+    '</section>';
+  }
+
+  /* "100", "82.5" — a score with one decimal only when it needs one. */
+  function showScore(n) {
+    if (typeof n !== "number") return String(n);
+    return (Math.round(n * 10) / 10 === Math.round(n)) ? String(Math.round(n))
+                                                       : (Math.round(n * 10) / 10).toFixed(1);
+  }
+
+  /* Demo mode: the site block with its heading and score, greyed out and
+     locked, nothing inside (D48; the decision against a ✓/✗ teaser is
+     recorded there too). */
+  function lockedSiteBlockHTML(theSite, r) {
+    return '<div class="site-block is-locked">' +
+      '<div class="locked-head"><span class="lock" aria-hidden="true">' + LOCK_ICON + '</span>' +
+      esc(MARKING.siteLabel(theSite)) +
+      '<span class="site-score">' + r.step4.score + '% · best possible ' +
+      (r.step4.bestOverall === null ? "—" : r.step4.bestOverall + "%") + '</span></div>' +
+      '</div>';
   }
 
   function siteBlockHTML(theSite, r, openByDefault) {
@@ -1118,7 +1258,7 @@
     var reveal = !!state.ui.revealReasons[id];
     var body = "";
 
-    body += stepBlock("Step 1 — Characteristics", r.step1.correct + " / " + r.step1.of,
+    body += stepBlock("Step 1: Characteristics", r.step1.correct + " / " + r.step1.of,
       r.step1.answered ? itemRows(r.step1.items.map(function (item) {
         return {
           name: item.expected.trait
@@ -1134,7 +1274,7 @@
         };
       }), reveal) : notAnswered());
 
-    body += stepBlock("Step 2 — Categorisation", r.step2.correct + " / " + r.step2.of,
+    body += stepBlock("Step 2: Categorisation", r.step2.correct + " / " + r.step2.of,
       itemRows(r.step2.items.map(function (item) {
         return {
           name: item.microbe, you: item.candidate, expected: item.expected,
@@ -1142,7 +1282,7 @@
         };
       }), reveal));
 
-    body += stepBlock("Step 3 — Selection", r.step3.correct + " / " + r.step3.of,
+    body += stepBlock("Step 3: Selection", r.step3.correct + " / " + r.step3.of,
       itemRows(r.step3.items.map(function (item) {
         return {
           name: item.set, you: item.candidate, expected: item.expected.join(" or "),
@@ -1153,7 +1293,7 @@
     body += step4Block(theSite, r.step4);
 
     if (r.step5.applicable) {
-      body += stepBlock("Step 5 — Confirmation for " + esc(MARKING.nextSiteLabel(theSite)),
+      body += stepBlock("Step 5: Confirmation for " + esc(MARKING.nextSiteLabel(theSite)),
         r.step5.correct + " / " + r.step5.of,
         itemRows(r.step5.items.map(function (item) {
           return {
@@ -1167,7 +1307,7 @@
       (reveal ? "Hide reasons for correct answers" : "Show reasons for correct answers") +
       '</button>';
 
-    return '<details class="site-block"' + (openByDefault ? " open" : "") + '>' +
+    return '<details class="site-block" data-site="' + esc(id) + '"' + (openByDefault ? " open" : "") + '>' +
       '<summary>' + esc(MARKING.siteLabel(theSite)) +
       '<span class="site-score">' + r.step4.score + '% · best possible ' +
       (r.step4.bestOverall === null ? "—" : r.step4.bestOverall + "%") + '</span></summary>' +
@@ -1206,7 +1346,7 @@
 
   function step4Block(theSite, s4) {
     if (!s4.answered) {
-      return stepBlock("Step 4 — Submission", "0%", notAnswered() +
+      return stepBlock("Step 4: Submission", "0%", notAnswered() +
         '<div class="best-line">Best possible at this site: <strong>' +
         (s4.bestOverall === null ? "—" : s4.bestOverall + "%") + '</strong></div>');
     }
@@ -1246,7 +1386,7 @@
         }).join("") + '</div></details>';
     }
 
-    return stepBlock("Step 4 — Submission",
+    return stepBlock("Step 4: Submission",
       s4.score + "%" + (s4.late ? " (after time)" : ""),
       '<div class="trio">' + trio + '</div>' + averages + penalties +
       '<div class="best-line">Best from your pool: <strong>' +
@@ -1269,7 +1409,7 @@
       .map(csvCell).join(",")];
 
     sites().forEach(function (s) {
-      var label = MARKING.siteLabel(s);
+      var siteName = MARKING.siteLabel(s);
       var r = state.result.sites[String(s.id)];
 
       r.step1.items.forEach(function (item) {
@@ -1277,33 +1417,38 @@
         var you = item.candidate
           ? (item.candidate.trait || (item.candidate.attribute + " " + rangeText(item.candidate.range)))
           : "";
-        lines.push([label, "Step 1: Characteristics", expected, you, expected,
+        lines.push([siteName, "Step 1: Characteristics", expected, you, expected,
           item.correct ? "Yes" : "No", item.late ? "Yes" : "No"].map(csvCell).join(","));
       });
 
       r.step2.items.forEach(function (item) {
-        lines.push([label, "Step 2: Categorisation", item.microbe, item.candidate || "",
+        lines.push([siteName, "Step 2: Categorisation", item.microbe, item.candidate || "",
           item.expected, item.correct ? "Yes" : "No", item.late ? "Yes" : "No"].map(csvCell).join(","));
       });
 
       r.step3.items.forEach(function (item) {
-        lines.push([label, "Step 3: Selection", item.set, item.candidate || "",
+        lines.push([siteName, "Step 3: Selection", item.set, item.candidate || "",
           item.expected.join(" or "), item.correct ? "Yes" : "No",
           item.late ? "Yes" : "No"].map(csvCell).join(","));
       });
 
-      lines.push([label, "Step 4: Submission", "Score",
+      lines.push([siteName, "Step 4: Submission", "Score",
         r.step4.answered ? r.step4.candidate.join(" + ") : "",
         "best for your pool " + r.step4.bestForYourPool + "%, best overall " + r.step4.bestOverall + "%",
         r.step4.score + "%", r.step4.late ? "Yes" : "No"].map(csvCell).join(","));
 
       if (r.step5.applicable) {
         r.step5.items.forEach(function (item) {
-          lines.push([label, "Step 5: Confirmation", item.microbe, item.candidate || "",
+          lines.push([siteName, "Step 5: Confirmation", item.microbe, item.candidate || "",
             item.expected, item.correct ? "Yes" : "No", item.late ? "Yes" : "No"].map(csvCell).join(","));
         });
       }
     });
+
+    if (state.result.benchmark) {
+      lines.push(["Total", "Weighted score", "", String(state.result.benchmark.weighted), "", "", ""].map(csvCell).join(","));
+      lines.push(["Total", "Percentile", "", String(state.result.benchmark.percentile), "", "", ""].map(csvCell).join(","));
+    }
 
     return lines.join("\r\n");
   }
@@ -1311,10 +1456,19 @@
   /* The download uses a link the page builds itself, which is the same way
      the current version does it and is confirmed to work inside the course
      lesson's frame. */
+  /* The file is named after the content's title, never a version id, since
+     no version must ever reach a candidate (D55, as Redrock Q21/R-D46):
+     "Sea Wolf Simulation" becomes sea-wolf-simulation-results.csv. */
+  function csvFileName(title) {
+    var slug = String(title || "simulation").toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    return (slug || "simulation") + "-results.csv";
+  }
+
   function downloadCSV() {
     var link = document.createElement("a");
     link.href = "data:text/csv;charset=utf-8," + encodeURIComponent("﻿" + buildCSV());
-    link.download = "answers.csv";
+    link.download = csvFileName(state.data && state.data.title);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1325,8 +1479,6 @@
      on showing a cross after they were already back to normal. Redrawing on
      the browser's own event keeps the button honest however they leave. */
   document.addEventListener("fullscreenchange", function () {
-    if (!document.fullscreenElement) state.ui.expanded = false;
-    applyExpanded();
     render();
   });
 
@@ -1365,6 +1517,9 @@
     if (isLastSite()) {
       pauseClock();
       state.result = MARKING.markGame(state.data, state.files, state.answers);
+      /* Site 1 open, the rest collapsed, on arrival (SW-BUILD-SPEC §7). */
+      state.ui.openSites = {};
+      state.ui.openSites[String(sites()[0].id)] = true;
       state.phase = "results";
       render();
     } else {
@@ -1386,6 +1541,7 @@
     state.ui.legendOpen = false;
     state.ui.openCards = {};
     state.ui.revealReasons = {};
+    state.ui.openSites = {};
     state.result = null;
     state.phase = "welcome";
     render();
@@ -1402,10 +1558,11 @@
 
       /* FULLSCREEN.
 
-         WK's ruling of 8 September 2026: real fullscreen matters more than
-         hiding the address. So this asks the browser for true fullscreen —
-         the simulation fills the whole monitor, and the browser's tabs,
-         address bar and the surrounding lesson page all disappear.
+         WK's ruling of 8 September 2026 (D37): real fullscreen matters more
+         than hiding the address. So this asks the browser for true
+         fullscreen — the simulation fills the whole monitor, and the
+         browser's tabs, address bar and the surrounding lesson page all
+         disappear.
 
          ONE THING TO KNOW, so nobody is caught out by it. On entering
          fullscreen the browser shows its own short notice, along the lines
@@ -1418,46 +1575,23 @@
          (which would name casementor.com): the lesson and the simulation are
          served from different web addresses, and a browser blocks a page
          from reaching the frame it sits inside when that is so. Tested, not
-         assumed — window.frameElement comes back unavailable.
+         assumed — window.frameElement comes back null.
 
          IF YOU WANT THE NOTICE TO NAME YOUR OWN ADDRESS, the way to do it is
          to serve these same files from a custom domain such as
          sim.casementor.com. That is a DNS setting plus a one-line CNAME file
-         in the repository, and it changes nothing in this code.
+         in the repository, and it changes nothing in this code (Q-G).
 
-         FALLBACK. A browser refuses fullscreen inside a frame when the
-         lesson's iframe lacks the allowfullscreen attribute. If that ever
-         happens the button still works: it falls back to filling the
-         lesson's frame edge to edge, which is bigger than the default. So
-         the candidate is never left with a button that does nothing. */
+         WHERE FULLSCREEN IS IMPOSSIBLE (a lesson iframe without the
+         allowfullscreen attribute, or a browser without the feature) the
+         button is not drawn at all — see fullscreenAvailable() and README
+         §8 (D46). */
       case "fullscreen": {
-        var inFullscreen = !!document.fullscreenElement;
-
-        if (!inFullscreen && !state.ui.expanded) {
-          /* going in */
-          var root = document.documentElement;
-          var ask = root.requestFullscreen ? root.requestFullscreen() : null;
-          if (ask && ask.then) {
-            ask.catch(function () {
-              /* the browser said no — fill the frame instead */
-              state.ui.expanded = true;
-              applyExpanded();
-              render();
-            });
-          } else if (!ask) {
-            /* no fullscreen support at all — fill the frame instead */
-            state.ui.expanded = true;
-            applyExpanded();
-            render();
-          }
-        } else {
-          /* coming out */
-          if (inFullscreen && document.exitFullscreen) {
-            document.exitFullscreen().catch(function () { });
-          }
-          state.ui.expanded = false;
-          applyExpanded();
-          render();
+        if (document.fullscreenElement) {
+          if (document.exitFullscreen) document.exitFullscreen().catch(function () { });
+        } else if (document.documentElement.requestFullscreen) {
+          var ask = document.documentElement.requestFullscreen();
+          if (ask && ask.catch) ask.catch(function () { render(); });
         }
         return;
       }
@@ -1621,6 +1755,15 @@
         return;
     }
   });
+
+  /* Results screen: when the candidate opens or closes a site block, note it
+     in the state so the next redraw keeps it that way. The browser's toggle
+     event does not bubble, so it is caught on the way down (the `true`). */
+  app.addEventListener("toggle", function (event) {
+    var d = event.target;
+    if (!d || !d.classList || !d.classList.contains("site-block")) return;
+    state.ui.openSites[d.dataset.site] = d.open;
+  }, true);
 
   /* ---- changes: toggles, sliders and the choice list ---- */
 

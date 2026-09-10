@@ -1,7 +1,24 @@
 {
   "simulation": "Sea Wolf — Simulation 1",
+  "title": "Sea Wolf Simulation",
   "timeLimitMinutes": 30,
   "sliderSpan": 3,
+  "results_mode": "full",
+  "labels": {
+    "timer_paused": "Timer paused",
+    "demo_note": "This is the free demo, which shows your score and percentile only. Our full simulations come with every answer explained in detail."
+  },
+  "benchmark": {
+    "note": "This percentile is our own estimate for this simulation, not a McKinsey figure. McKinsey does not publish its exact scoring, so we score every step of the game, with your final submission at each site carrying the most weight. Candidates who pass typically score in the top quartile, but we recommend aiming for the 90th and above.",
+    "phase_weights": { "step1": 5, "step2": 25, "step3": 20, "step4": 40, "step5": 10 },
+    "zones": [
+      { "from": 0, "label": "Below 70th" },
+      { "from": 70, "label": "Borderline" },
+      { "from": 80, "label": "Likely pass" },
+      { "from": 90, "label": "Comfortable" }
+    ],
+    "percentiles": [[0,1],[20,5],[35,12],[45,20],[55,30],[62,40],[68,50],[74,60],[79,68],[84,75],[88,80],[91,85],[94,90],[96,94],[98,97],[100,99]]
+  },
   "sites": [
     {
       "id": 1,

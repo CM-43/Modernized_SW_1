@@ -142,7 +142,10 @@ small, .small { font-size: max(12px, 0.8em); }
   padding: 0 14px;
   gap: 12px;
   position: relative;
-  z-index: 30;
+  /* Above the popup backdrop (z-index 100), so Restart and Fullscreen stay
+     clickable while a popup is showing. Before this, a candidate could not
+     go fullscreen until after pressing Begin, which starts the clock (D46). */
+  z-index: 200;
 }
 
 .header-left, .header-right {
@@ -165,11 +168,32 @@ small, .small { font-size: max(12px, 0.8em); }
   min-width: 0;
 }
 
+.timer-stack {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+}
 .timer-text {
   font-size: max(13px, 0.85em);
   color: var(--on-dark);
   white-space: nowrap;
 }
+/* "Timer paused" sits just under the time, as the real game prints it. It
+   is positioned absolutely so its appearing and disappearing never changes
+   the header's height or moves the time text and the bar (D49). */
+.timer-paused {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: -2px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--on-dark-muted);
+  white-space: nowrap;
+  visibility: hidden;
+}
+.timer-paused.is-visible { visibility: visible; }
 .timer-text.is-up { color: #fca5a5; font-weight: 600; }
 
 .time-bar {
@@ -232,21 +256,7 @@ small, .small { font-size: max(12px, 0.8em); }
   display: flex;
 }
 
-/* EXPANDED VIEW ("Expand" in the top-right of the header bar)
-
-   This is our replacement for the browser's fullscreen button. We do not
-   use the browser's fullscreen because it always shows a notice naming the
-   web address the simulation is served from, and that notice is drawn by
-   the browser outside the page, so nothing here can change or hide it.
-
-   Instead, Expand simply removes the breathing space around the playing
-   area so the simulation fills the lesson's frame edge to edge. It is
-   ordinary CSS: no browser API is called, so no notice can appear.
-
-   If you ever want to tune how much bigger it gets, the two numbers below
-   are the whole story. */
-html.is-expanded .stage { padding: 0; }
-html.is-expanded .main-box { border-radius: 0; border-width: 0; }
+.main-box { border-radius: 0; border-width: 0; }
 
 .main-box {
   flex: 1 1 auto;
@@ -948,7 +958,12 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
    exactly the shrinking you saw after finishing Step 3. Keep the two rules
    below sharing the same two variables. */
 .s34 {
-  --cand-w: clamp(150px, 14.5vw, 200px);
+  /* The floor was 150px. At the 1000px minimum window that left the name
+     87.4px of a box 87.0px wide, so every name drew as "Microbe …" and
+     "Pressure Resistant" wrapped onto two lines (D47). 172px fits every
+     name and every trait label on one line; three cards plus Submit still
+     fit the workspace at 1000px with room to spare (measured). */
+  --cand-w: clamp(172px, 14.5vw, 200px);
   --cand-h: clamp(232px, 25vh, 268px);
 }
 
@@ -994,10 +1009,14 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Same width as the button, so the name sits in the middle of the card. */
+/* Same width as the button, so the name sits in the middle of the card.
+   On a narrow card the spacer gives way FIRST (flex-shrink 1000 against the
+   name's 1), so the name keeps its full width and is only slightly
+   off-centre, rather than being cut to "Micro…" (D47). */
 .cand-card .card-head-spacer {
-  flex: 0 0 var(--btn-size);
+  flex: 0 1000 var(--btn-size);
   width: var(--btn-size);
+  min-width: 0;
   height: var(--btn-size);
 }
 .cand-card .stat-row { flex: 0 0 auto; }
@@ -1049,7 +1068,7 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
      flat 58px. It is now a range: 46px is the target on a normal screen,
      but on a small window it is allowed back up to 52px, because below
      that the attribute row no longer fits beside the name at our 12px
-     minimum type size and gets cut off sideways. Measured at 900x540,
+     minimum type size and gets cut off sideways. Measured at 900x540 (the minimum at the time; now 1000x562),
      1120x630 and 1920x1080. */
   /* Back up from the 46px of the first attempt. WK's point was that the
      CARD was fine and only the picture was too big; shrinking the card made
@@ -1252,6 +1271,11 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
      the space the picture gives up is what lets the card below it hold its
      name, its numbers and its button comfortably at every window size. */
   max-width: 60%;
+  /* And never taller than this, whatever the monitor. Without a ceiling a
+     2560px-wide screen grew the pictures to ~250px while the cards and
+     their text stayed small (D47). At the 1402px lesson width the 60%
+     rule is the smaller of the two, so nothing changes there. */
+  max-height: min(100%, 150px);
   object-fit: contain;
 }
 
@@ -1476,7 +1500,7 @@ html.is-expanded .main-box { border-radius: 0; border-width: 0; }
 
    Without `flex-shrink: 0` the card is a flex item in a column whose height
    comes from the grid, and on a small window the grid squeezed it: at
-   900x540 a 58px card was being compressed to 35px, and the name and the
+   900x540 (then the minimum) a 58px card was being compressed to 35px, and the name and the
    numbers piled up on top of each other. The picture above it absorbs the
    squeeze instead, which is what should give way. */
 .mini-card {
@@ -1653,6 +1677,181 @@ body.scrolls #app {
 .results-top h1 { font-size: clamp(20px, 2vw, 28px); }
 .results-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ---- "Where you stand" — the estimated percentile (D48, D54) ----
+   These rules are Redrock v1.2's, copied verbatim (from its app.css section
+   13) so that the two products draw the same card: big number with a
+   smaller ordinal, a filled pill in the zone's pale tint, a thin decile
+   band with the numbers beneath it, a blue marker, a legend reading
+   "70–79 · Borderline", and the note under a thin rule. Colours carry
+   meaning: grey below the pass region, amber for the borderline zone,
+   green above it. Never red. Do not restyle this card on one product
+   without the other. */
+.standing {
+  background: var(--surface-plain);
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius);
+  padding: 22px 26px 18px;
+  margin-bottom: 14px;   /* Redrock: var(--space-4) = 14px */
+  color: var(--on-light);
+}
+.standing-main {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.9fr) minmax(0, 2fr);
+  gap: 28px;
+  align-items: center;
+}
+.standing-figure { display: flex; align-items: baseline; flex-wrap: wrap; line-height: 1; }
+.standing-number { font-size: clamp(44px, 4.2vw, 56px); font-weight: 800; letter-spacing: -0.02em; }
+.standing-ordinal { font-size: clamp(20px, 1.9vw, 26px); font-weight: 800; margin-left: 1px; }
+.standing-word {
+  font-size: clamp(17px, 1.5vw, 20px);
+  font-weight: 700;
+  color: var(--on-light);
+  margin-left: 12px;
+}
+.standing-pill {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-size: max(13px, 0.84em);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.standing-sentence {
+  margin: 12px 0 0;
+  font-size: max(14px, 0.9em);
+  line-height: 1.5;
+  color: #3d4757;
+}
+.standing-sentence b { color: var(--on-light); }
+
+/* the candidate's zone: number, ordinal and pill (text contrast measured on
+   the pill's own background: grey 8.9 : 1, amber 6.4 : 1, green 6.5 : 1) */
+.standing.tone-grey  .standing-number, .standing.tone-grey  .standing-ordinal { color: #4b5563; }
+.standing.tone-grey  .standing-pill  { background: #eceef2; color: #374151; }
+.standing.tone-amber .standing-number, .standing.tone-amber .standing-ordinal { color: #b45309; }
+.standing.tone-amber .standing-pill  { background: #fef3c7; color: #92400e; }
+.standing.tone-lightgreen .standing-number, .standing.tone-lightgreen .standing-ordinal,
+.standing.tone-green .standing-number, .standing.tone-green .standing-ordinal { color: #15803d; }
+.standing.tone-lightgreen .standing-pill,
+.standing.tone-green .standing-pill  { background: #dcfce7; color: #166534; }
+
+/* the decile band: ten cells, each coloured by the zone its decile is in */
+.band { position: relative; padding-top: 24px; }
+.band-cells { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.band-cell { height: 26px; border-radius: 4px; }
+.band-nums {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 6px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--on-light-muted);
+}
+.tone-grey.band-cell,       .legend-item i.tone-grey       { background: #e3e6ec; }
+.tone-amber.band-cell,      .legend-item i.tone-amber      { background: #fde68a; }
+.tone-lightgreen.band-cell, .legend-item i.tone-lightgreen { background: #bbf7d0; }
+.tone-green.band-cell,      .legend-item i.tone-green      { background: #86efac; }
+
+/* the candidate's position: a label, a triangle, and a dashed line straight
+   down through the band at exactly their percentile */
+.band-marker {
+  position: absolute;
+  top: 0;
+  bottom: 22px;
+  width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+.marker-label {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  left: 0;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1d4ed8;
+  line-height: 14px;
+}
+.marker-arrow {
+  position: absolute;
+  top: 15px;
+  left: -6px;
+  width: 0; height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid #1d4ed8;
+}
+.marker-line {
+  position: absolute;
+  top: 22px;
+  bottom: 0;
+  left: -1px;
+  border-left: 2px dashed #1d4ed8;
+}
+
+.band-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 12px;
+  font-size: max(12px, 0.8em);
+  font-weight: 600;
+  color: #3d4757;
+}
+.legend-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.legend-item i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+.standing-note {
+  margin: 18px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--surface-line);
+  font-size: max(12px, 0.8em);
+  line-height: 1.55;
+  color: var(--on-light-muted);
+}
+
+@media (max-width: 760px) {
+  .standing-main { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+}
+
+/* ---- demo mode (D48): the note, and the locked site blocks ---- */
+.demo-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-plain);
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: max(14px, 0.9em);
+}
+.demo-note .lock, .locked-head .lock { display: inline-flex; color: var(--on-light-muted); }
+.site-block.is-locked {
+  opacity: 0.55;
+  filter: grayscale(0.85);
+}
+.locked-head {
+  padding: 14px 18px;
+  font-weight: 700;
+  font-size: max(15px, 1.05em);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.locked-head .site-score {
+  margin-left: auto;
+  font-weight: 600;
+  font-size: max(13px, 0.9em);
+  color: var(--on-light-muted);
+}
+
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -1826,6 +2025,7 @@ body.scrolls #app {
   body { overflow: visible; background: #fff; }
   .results { background: #fff; padding: 0; }
   .results-actions, .reveal, .btn, .header-bar { display: none !important; }
+  .standing { break-inside: avoid; }
   .site-block { break-inside: auto; border-color: #bbb; }
   .site-block > summary { break-after: avoid; }
   details { display: block; }

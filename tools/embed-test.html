@@ -77,7 +77,7 @@
   <tr><td class="k">Inside a frame?</td><td class="v" id="in-frame">—</td></tr>
   <tr><td class="k">Raw referrer</td><td class="v" id="referrer">—</td></tr>
   <tr><td class="k">Size this page has been given</td><td class="v" id="size">—</td></tr>
-  <tr><td class="k">Big enough for the simulation? (needs 900 × 540)</td><td class="v" id="big-enough">—</td></tr>
+  <tr><td class="k">Big enough for the simulation? (needs 1000 × 562)</td><td class="v" id="big-enough">—</td></tr>
   <tr><td class="k">Screen size</td><td class="v" id="screen">—</td></tr>
   <tr><td class="k">Browser storage reachable?</td><td class="v" id="storage">—</td></tr>
   <tr><td class="k">Browser</td><td class="v" id="ua">—</td></tr>
@@ -128,7 +128,7 @@ function report() {
 
   var w = window.innerWidth, h = window.innerHeight;
   set("size", w + " x " + h + " pixels");
-  var bigEnough = w >= 900 && h >= 540;
+  var bigEnough = w >= 1000 && h >= 562;
   set("big-enough", bigEnough ? "yes" : "no — the simulation will ask the visitor to enlarge",
     bigEnough ? "yes" : "no");
 

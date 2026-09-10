@@ -194,8 +194,34 @@ and get it fixed properly, or the next one will need it too.
 
 ```json
 {
+  "title": "Sea Wolf Simulation", // the name candidates see; also names the
+                                  // downloaded results file. Never a version number.
   "timeLimitMinutes": 30,        // the clock, for the whole game
   "sliderSpan": 3,               // the Step 1 slider always covers 3 values
+
+  // "full" = every answer explained on the results screen (the paid product).
+  // "demo" = score and percentile only; the explanations are drawn greyed out
+  //          and locked, and the CSV and Print buttons disappear. Use this for a
+  //          free demo copy. NEVER upload tools/answer-key.html with a demo.
+  "results_mode": "full",
+
+  // Wording candidates read, kept here so you can change it without touching code.
+  // No em dashes, no brand or course names, no counts of simulations.
+  "labels": {
+    "timer_paused": "Timer paused",
+    "demo_note": "This is the free demo, which shows your score and percentile only. Our full simulations come with every answer explained in detail."
+  },
+
+  // The "Where you stand" card at the top of the results screen. Leave the
+  // whole block out and no percentile is shown. See the note after this listing.
+  "benchmark": {
+    "note": "This percentile is our own estimate ...",
+    "phase_weights": { "step1": 5, "step2": 25, "step3": 20, "step4": 40, "step5": 10 },
+    "zones": [ { "from": 0, "label": "Below 70th" }, { "from": 70, "label": "Borderline" },
+               { "from": 80, "label": "Likely pass" }, { "from": 90, "label": "Comfortable" } ],
+    "percentiles": [[0,1],[20,5],[35,12],[45,20],[55,30],[62,40],[68,50],[74,60],[79,68],[84,75],[88,80],[91,85],[94,90],[96,94],[98,97],[100,99]]
+  },
+
   "sites": [
     {
       "id": 1,                   // 1, 2, 3 ... in order
@@ -238,6 +264,36 @@ of `"Existing"`, and exactly three rows each of `"Set 1"`, `"Set 2"`,
 
 The four trait names are fixed and spelled exactly like this:
 `Pressure Resistant`, `Hydrophilic`, `Aerobic`, `Heat Resistant`.
+
+### How the percentile is worked out (the `benchmark` block)
+
+There is no database of candidates. The percentile is an **estimate from
+the score**, and the results screen says so in the `note`. Two steps:
+
+1. **A weighted score out of 100.** Each step of the game becomes a
+   fraction of its best possible, across all sites: Steps 1, 2, 3 and 5 are
+   correct divided by asked; Step 4 is the average over the sites of the
+   score divided by the best score possible at that site (so 80% at a site
+   where 80% is the ceiling counts as full marks). Each fraction is
+   multiplied by its weight in `phase_weights` (`step1` … `step5`) and the
+   results are added up. The weights must add up to 100. Two rules to know:
+   Step 5 counts only the microbes the candidate actually sent forward (a
+   microbe wrongly returned at Step 2 is penalised there, not twice), and if
+   nothing was sent forward Step 5 drops out and the other weights are
+   scaled up. A wrong Step 3 pick, on the other hand, *can* cost twice — at
+   Step 3, and again by capping what Step 4 can reach — which is accepted as
+   the one place mistakes snowball, as in the real game.
+2. **The table.** `percentiles` is a list of `[weighted score, percentile]`
+   points; the candidate's score is read off it with straight lines drawn
+   between the points, rounded to a whole number, and always kept between 1
+   and 99. `zones` names the bands **by percentile**: the first must start
+   at 0.
+
+The same table and zones are used by the Redrock simulation, so a candidate
+sees one system across products. `tests.html` refuses a table that is out of
+order, a percentile outside 1–99, or weights that do not add up to 100, and
+`tools/answer-key.html` prints the whole mapping with worked examples so you
+can see what a given score will show.
 
 ---
 
@@ -290,7 +346,13 @@ address. Open it from your GitHub Pages address.
 
 **The fullscreen button is missing.**
 The lesson did not allow fullscreen. Add `allowfullscreen allow="fullscreen"`
-to the iframe tag.
+to the iframe tag. (The button is deliberately not drawn where fullscreen is
+impossible; it never pretends to work.)
+
+**A candidate sees "Please enlarge your browser window (minimum 1000 × 562)".**
+The window or the lesson's frame is smaller than the simulation supports. A
+16:9 frame needs to be at least 1000 pixels wide. The game comes back by
+itself as soon as the window is large enough; nothing is lost.
 
 **A candidate says they lost their answers.**
 They refreshed or reopened the page. Nothing is saved anywhere, on purpose.

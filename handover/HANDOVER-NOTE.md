@@ -4,7 +4,7 @@
 - **Revised:** 9 April 2026, after WK's review — thirteen presentation
   changes, none touching the marking. Full detail in the project doc
   `claude/SW-WK-Review-Round-2026-04-09.md`.
-- **Live at:** `https://cm-43.github.io/Modern_SW_1/`
+- **Live at:** `https://cm-43.github.io/Modernized_SW_1/` (the earlier `Modern_SW_1` is dead)
 - **For:** WK (CareerLumina)
 - **To be verified by:** Claude Fable 5.1, from the specification and not from this note
 

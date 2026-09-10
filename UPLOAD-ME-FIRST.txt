@@ -1,6 +1,6 @@
 SEA WOLF — HOW TO UPLOAD THIS SO IT ACTUALLY LANDS
 ==================================================
-Version 2, 9 April 2026
+Version 3, 10 September 2026
 
 
 THE ONE MISTAKE TO AVOID
@@ -54,16 +54,23 @@ HOW TO CHECK IT WORKED
 ----------------------
 Open:   https://cm-43.github.io/YOUR-REPO-NAME/
 
-On the login screen, bottom right of the white box, you should see:
+There is deliberately no version number on screen (a candidate who sees a
+date thinks the tool is out of date). To confirm the upload landed, open
+this address in your browser and look at the code itself:
 
-        v2 - 9 April 2026
+        https://cm-43.github.io/YOUR-REPO-NAME/js/marking.js
 
-If you see that line, the new version is live. If you do not see it, the
-upload did not land or your browser is showing a cached copy - press
-Ctrl+Shift+R to force a fresh load, then look again.
+Press Ctrl+F and search for a phrase you know is in the new version. For
+this package (v13, 10 September 2026) search for:
+
+        STEP_WEIGHT_KEYS
+
+If it is found, the new version is live. If not, the upload did not land or
+your browser is showing a cached copy - press Ctrl+Shift+R to force a fresh
+load, then look again.
 
 Then open:   https://cm-43.github.io/YOUR-REPO-NAME/tests.html
-It must say ALL TEST GROUPS PASSED, 83 checks, 0 failed.
+It must say ALL TEST GROUPS PASSED, 123 checks, 0 failed.
 
 
 HOW TO TELL THE UPLOAD WENT IN CORRECTLY
